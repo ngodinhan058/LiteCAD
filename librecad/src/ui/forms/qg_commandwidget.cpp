@@ -129,20 +129,13 @@ bool QG_CommandWidget::eventFilter(QObject */*obj*/, QEvent *event)
         switch(key) {
         case Qt::Key_Return:
         case Qt::Key_Enter:
+        case Qt::Key_Space:
             if(!leCommand->text().size())
                 return false;
             else
                 break;
         case Qt::Key_Escape:
             return false;
-        case Qt::Key_Space:
-            if (!hasFocus() && RS_SETTINGS->readNumEntry("/Keyboard/ToggleFreeSnapOnSpace", false)) {
-                // do not take focus here
-                spacePressed();
-                e->accept();
-                return true;
-            }
-            break;
         default:
             break;
         }

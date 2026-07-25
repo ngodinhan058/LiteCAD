@@ -199,6 +199,7 @@ RS_Commands::RS_Commands() {
         {
             {{"linerec", QObject::tr("linerec", "draw rectangle")}},
             {{"re", QObject::tr("re", "draw rectangle")},
+                {"rec", QObject::tr("rec", "draw rectangle")},
                 {"rect", QObject::tr("rect", "draw rectangle")}},
             RS2::ActionDrawLineRectangle
         },
@@ -790,7 +791,9 @@ RS_Commands::RS_Commands() {
         // delete
         {
             {{"moddelete", QObject::tr("moddelete", "modify - delete (erase)")}},
-            {{"er", QObject::tr("er", "modify - delete (erase)")},
+            {{"e", QObject::tr("e", "modify - delete (erase)")},
+                {"erase", QObject::tr("erase", "modify - delete (erase)")},
+                {"er", QObject::tr("er", "modify - delete (erase)")},
                 {"del", QObject::tr("del", "modify - delete (erase)")}},
             RS2::ActionModifyDelete
         },
@@ -1340,8 +1343,8 @@ RS2::ActionType RS_Commands::cmdToAction(const QString& cmd, bool verbose) const
     // find command:
     for(const auto& table: {m_mainCommands, m_shortCommands})
     {
-        if (table.count(cmd)) {
-            ret = table.at(cmd);
+        if (table.count(full)) {
+            ret = table.at(full);
             break;
         }
     }
