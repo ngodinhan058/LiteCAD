@@ -305,9 +305,9 @@ public:
 	double toGuiDX(double d) const;
 	double toGuiDY(double d) const;
 
-    RS_Vector toGraph(const RS_Vector& v) const;
-    RS_Vector toGraph(const QPointF& v) const;
-    RS_Vector toGraph(int x, int y) const;
+    virtual RS_Vector toGraph(const RS_Vector& v) const;
+    virtual RS_Vector toGraph(const QPointF& v) const;
+    virtual RS_Vector toGraph(int x, int y) const;
 	double toGraphX(int x) const;
 	double toGraphY(int y) const;
 	double toGraphDX(int d) const;

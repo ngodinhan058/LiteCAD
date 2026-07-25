@@ -27,6 +27,8 @@
 #include <cmath>
 #include <iostream>
 
+#include <QApplication>
+#include <QCursor>
 #include <QDebug>
 #include <QGridLayout>
 #include <QLabel>
@@ -44,7 +46,9 @@
 
 #include "rs_actionblocksedit.h"
 #include "rs_actiondefault.h"
+#include "rs_actioninterface.h"
 #include "rs_actionmodifydelete.h"
+#include "rs_previewactioninterface.h"
 #include "rs_actionmodifyentity.h"
 #include "rs_actionselectsingle.h"
 #include "rs_actionzoomauto.h"
@@ -266,6 +270,7 @@ QG_GraphicView::QG_GraphicView(QWidget* parent, Qt::WindowFlags f, RS_Document* 
     , m_panData{std::make_unique<AutoPanData>()}
 {
     RS_DEBUG->print("QG_GraphicView::QG_GraphicView()..");
+    setCursor(Qt::BlankCursor);
 
     if (doc != nullptr)
     {
@@ -397,9 +402,7 @@ void QG_GraphicView::setMouseCursor(RS2::CursorType cursorType) {
         setCursor(Qt::ClosedHandCursor);
         break;
     case RS2::CadCursor:
-        cursor_hiding
-            ? setCursor(Qt::BlankCursor)
-            : setCursor(*curCad);
+        setCursor(Qt::BlankCursor);
         break;
     case RS2::DelCursor:
         setCursor(*curDel);
@@ -451,11 +454,19 @@ void QG_GraphicView::resizeEvent(QResizeEvent* /*e*/) {
 void QG_GraphicView::mousePressEvent(QMouseEvent* event)
 {
     // pan zoom with middle mouse button
-    if (event->button()==Qt::MiddleButton)
+    if (event->button() == Qt::MiddleButton)
     {
         setCurrentAction(new RS_ActionZoomPan(*container, *this));
     }
-    eventHandler->mousePressEvent(event);
+
+    // Explicitly force click execution coordinate to locked snapPos / getMousePosition(), completely ignoring raw screen data
+    RS_Vector clickPos = getMousePosition();
+    int clickX = qRound(toGuiX(clickPos.x));
+    int clickY = qRound(toGuiY(clickPos.y));
+
+    QMouseEvent snappedEvent(event->type(), QPoint(clickX, clickY),
+                            event->button(), event->buttons(), event->modifiers());
+    eventHandler->mousePressEvent(&snappedEvent);
 }
 
 void QG_GraphicView::mouseDoubleClickEvent(QMouseEvent* e)
@@ -664,28 +675,83 @@ void QG_GraphicView::mouseMoveEvent(QMouseEvent* event)
         return;
     }
     m_panData->panTimer.reset();
-    // handle auto-panning
     event->accept();
-    eventHandler->mouseMoveEvent(event);
 
-    // Passive Snap Tracking & Preview on Hover over any line/entity (independent mode)
+    // Passive Snap Tracking & Preview on Hover
     RS_Vector mousePos = toGraph(event->x(), event->y());
     RS_Vector snapPos = passiveTrackSnap(mousePos);
 
-    RS_EntityContainer* overlay = getOverlayContainer(RS2::Snapper);
-    if (overlay != nullptr) {
-        overlay->clear();
-        if (snapPos.valid && mousePos.distanceTo(snapPos) <= toGraphDX(32)) {
-            double gx = toGuiX(snapPos.x);
-            double gy = toGuiY(snapPos.y);
-            double sz = 6.0;
+    if (snapPos.valid && mousePos.distanceTo(snapPos) <= toGraphDX(32)) {
+        this->currentMouse = snapPos;
+        int snapX = qRound(toGuiX(snapPos.x));
+        int snapY = qRound(toGuiY(snapPos.y));
 
+        QPoint snapLocal(snapX, snapY);
+        QPoint snapGlobal = mapToGlobal(snapLocal);
+
+        // Hardware cursor attraction and deadzone pull-away handling
+        if (m_isCursorSnapped) {
+            int delta = (QCursor::pos() - m_snappedGlobalPos).manhattanLength();
+            if (delta > 20) {
+                m_isCursorSnapped = false;
+            }
+        } else {
+            int distToSnap = (event->pos() - snapLocal).manhattanLength();
+            if (distToSnap < 16) {
+                QCursor::setPos(snapGlobal);
+                m_snappedGlobalPos = snapGlobal;
+                m_isCursorSnapped = true;
+            }
+        }
+
+        QMouseEvent snappedEvent(event->type(), QPoint(snapX, snapY),
+                                event->button(), event->buttons(), event->modifiers());
+
+        if (eventHandler != nullptr) {
+            eventHandler->mouseMoveEvent(&snappedEvent);
+
+            RS_ActionInterface* activeAction = eventHandler->hasAction() ?
+                                                eventHandler->getCurrentAction() :
+                                                eventHandler->getDefaultAction();
+            if (activeAction != nullptr) {
+                RS_Snapper* snapper = dynamic_cast<RS_Snapper*>(activeAction);
+                if (snapper != nullptr) {
+                    snapper->snapPoint(snapPos, true);
+                }
+                RS_PreviewActionInterface* previewAction = dynamic_cast<RS_PreviewActionInterface*>(activeAction);
+                if (previewAction != nullptr) {
+                    previewAction->mouseMoveEvent(&snappedEvent);
+                    previewAction->drawPreview();
+                }
+            }
+        }
+
+        RS_EntityContainer* overlay = getOverlayContainer(RS2::Snapper);
+        if (overlay != nullptr) {
+            overlay->clear();
+            double gx = double(snapX);
+            double gy = double(snapY);
+            double viewW = double(getWidth());
+            double viewH = double(getHeight());
+
+            RS_Pen greenPen(RS_Color(0, 255, 0), RS2::Width00, RS2::SolidLine);
+            RS_Pen crosshairPen(RS_Color(0, 255, 0), RS2::Width00, RS2::SolidLine);
+
+            // AutoCAD crosshair intersecting exactly at snapPos (gx, gy)
+            RS_OverlayLine* chH = new RS_OverlayLine(nullptr, {{0.0, gy}, {viewW, gy}});
+            chH->setPen(crosshairPen);
+            RS_OverlayLine* chV = new RS_OverlayLine(nullptr, {{gx, 0.0}, {gx, viewH}});
+            chV->setPen(crosshairPen);
+
+            overlay->addEntity(chH);
+            overlay->addEntity(chV);
+
+            // AutoCAD snap preview indicator box centered at (gx, gy)
+            double sz = 6.0;
             RS_Vector p1(gx - sz, gy - sz);
             RS_Vector p2(gx + sz, gy - sz);
             RS_Vector p3(gx + sz, gy + sz);
             RS_Vector p4(gx - sz, gy + sz);
-
-            RS_Pen greenPen(RS_Color(0, 255, 0), RS2::Width02, RS2::SolidLine);
 
             RS_OverlayLine* l1 = new RS_OverlayLine(nullptr, {p1, p2});
             l1->setPen(greenPen);
@@ -700,6 +766,32 @@ void QG_GraphicView::mouseMoveEvent(QMouseEvent* event)
             overlay->addEntity(l2);
             overlay->addEntity(l3);
             overlay->addEntity(l4);
+        }
+        redraw(RS2::RedrawOverlay);
+        update();
+    } else {
+        this->currentMouse = mousePos;
+        m_isCursorSnapped = false;
+        if (eventHandler != nullptr) {
+            eventHandler->mouseMoveEvent(event);
+        }
+
+        RS_EntityContainer* overlay = getOverlayContainer(RS2::Snapper);
+        if (overlay != nullptr) {
+            overlay->clear();
+            double gx = double(event->x());
+            double gy = double(event->y());
+            double viewW = double(getWidth());
+            double viewH = double(getHeight());
+
+            RS_Pen crosshairPen(RS_Color(0, 255, 0), RS2::Width00, RS2::SolidLine);
+            RS_OverlayLine* chH = new RS_OverlayLine(nullptr, {{0.0, gy}, {viewW, gy}});
+            chH->setPen(crosshairPen);
+            RS_OverlayLine* chV = new RS_OverlayLine(nullptr, {{gx, 0.0}, {gx, viewH}});
+            chV->setPen(crosshairPen);
+
+            overlay->addEntity(chH);
+            overlay->addEntity(chV);
         }
         redraw(RS2::RedrawOverlay);
         update();
@@ -826,11 +918,13 @@ void QG_GraphicView::leaveEvent(QEvent* e) {
     // stop auto-panning
     m_panData->panTimer.reset();
 
+    QApplication::restoreOverrideCursor();
     eventHandler->mouseLeaveEvent();
     QWidget::leaveEvent(e);
 }
 
 void QG_GraphicView::enterEvent(QEvent* e) {
+    QApplication::setOverrideCursor(Qt::BlankCursor);
     eventHandler->mouseEnterEvent();
     QWidget::enterEvent(e);
 }
@@ -1224,14 +1318,66 @@ void QG_GraphicView::setOffset(int ox, int oy) {
     adjustOffsetControls();
 }
 
+RS_Vector QG_GraphicView::toGraph(int x, int y) const
+{
+    if (m_isCursorSnapped && currentMouse.valid) {
+        RS_Vector rawGraphPos = RS_GraphicView::toGraph(x, y);
+        if (rawGraphPos.distanceTo(currentMouse) <= toGraphDX(16)) {
+            return currentMouse;
+        } else {
+            const_cast<QG_GraphicView*>(this)->m_isCursorSnapped = false;
+            const_cast<QG_GraphicView*>(this)->currentMouse = RS_Vector(false);
+        }
+    }
+    return RS_GraphicView::toGraph(x, y);
+}
+
+RS_Vector QG_GraphicView::toGraph(const QPointF& position) const
+{
+    if (m_isCursorSnapped && currentMouse.valid) {
+        RS_Vector rawGraphPos = RS_GraphicView::toGraph(position);
+        if (rawGraphPos.distanceTo(currentMouse) <= toGraphDX(16)) {
+            return currentMouse;
+        } else {
+            const_cast<QG_GraphicView*>(this)->m_isCursorSnapped = false;
+            const_cast<QG_GraphicView*>(this)->currentMouse = RS_Vector(false);
+        }
+    }
+    return RS_GraphicView::toGraph(position);
+}
+
+RS_Vector QG_GraphicView::toGraph(const RS_Vector& v) const
+{
+    if (m_isCursorSnapped && currentMouse.valid) {
+        RS_Vector rawGraphPos = RS_GraphicView::toGraph(v);
+        if (rawGraphPos.distanceTo(currentMouse) <= toGraphDX(16)) {
+            return currentMouse;
+        } else {
+            const_cast<QG_GraphicView*>(this)->m_isCursorSnapped = false;
+            const_cast<QG_GraphicView*>(this)->currentMouse = RS_Vector(false);
+        }
+    }
+    return RS_GraphicView::toGraph(v);
+}
+
 RS_Vector QG_GraphicView::getMousePosition() const
 {
+    if (currentMouse.valid) {
+        return currentMouse;
+    }
+
     //find mouse position
     QPoint vp=mapFromGlobal(QCursor::pos());
     //if cursor is not on widget, return the widget center position
     if(!rect().contains(vp))
         vp=QPoint(width()/2, height()/2);
-    return toGraph(vp.x(), vp.y());
+    RS_Vector rawPos = RS_GraphicView::toGraph(vp.x(), vp.y());
+
+    RS_Vector snapPos = const_cast<QG_GraphicView*>(this)->passiveTrackSnap(rawPos);
+    if (snapPos.valid && rawPos.distanceTo(snapPos) <= const_cast<QG_GraphicView*>(this)->toGraphDX(32)) {
+        return snapPos;
+    }
+    return rawPos;
 }
 
 void QG_GraphicView::getPixmapForView(std::unique_ptr<QPixmap>& pm)

@@ -90,6 +90,9 @@ public:
      * returns the widget center, if cursor is not on the widget
      */
 	RS_Vector getMousePosition() const override;
+    RS_Vector toGraph(const RS_Vector& v) const override;
+    RS_Vector toGraph(const QPointF& v) const override;
+    RS_Vector toGraph(int x, int y) const override;
 	RS_Vector getSnap(const RS_Vector& pos);
 	RS_Vector getSnap();
 	RS_Vector passiveTrackSnap(const RS_Vector& pos);
@@ -167,6 +170,9 @@ private:
     bool antialiasing{false};
     bool scrollbars{false};
     bool cursor_hiding{false};
+    bool m_isCursorSnapped{false};
+    QPoint m_snappedGlobalPos;
+    RS_Vector currentMouse;
 
 
     // For auto panning by the cursor close to the view border
