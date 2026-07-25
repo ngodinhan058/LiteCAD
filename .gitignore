@@ -1,0 +1,77 @@
+# ==========================================
+# LibreCAD Project .gitignore
+# ==========================================
+
+# Boost downloaded headers and archives
+boost_1_75_0/
+boost.tar.gz
+boost.zip
+
+# Compiler generated & intermediate build directories
+generated/
+*generated*
+build/
+cmake-build-debug/
+appdir/
+unix/
+windows/
+release/
+debug/
+html/
+__pycache__/
+
+# Object and archive/library files
+*.o
+*.obj
+*.lo
+*.la
+*.a
+*.lib
+*.dll
+*.so
+*.dylib
+
+# Executables
+*.exe
+LibreCAD.app/
+LibreCAD.dmg
+*.AppImage
+
+# Makefiles and QMake stashes
+Makefile*
+Makefile
+Makefile.Debug
+Makefile.Release
+.qmake.stash
+object_script.*
+
+# Custom user configurations & scripts
+custom.pri
+custom.pro
+custom.*
+powershell.cmd
+*.pro.user*
+*.user
+
+# Backup, log, and IDE temporary files
+*.autosave
+*~
+*.bak
+*.swp
+*.orig
+*.patch
+*.rej
+*.log
+*.tlog
+*.ncb
+*.suo
+*.idb
+*.pdb
+*.exp
+*.ilk
+*.opendb
+*.db
+
+# macOS / Windows OS system files
+.DS_Store
+Thumbs.db
