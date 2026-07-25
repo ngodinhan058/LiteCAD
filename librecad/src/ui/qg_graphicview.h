@@ -90,6 +90,8 @@ public:
      * returns the widget center, if cursor is not on the widget
      */
 	RS_Vector getMousePosition() const override;
+	RS_Vector getSnap(const RS_Vector& pos);
+	RS_Vector getSnap();
 
     void setAntialiasing(bool state);
     void setCursorHiding(bool state);

@@ -3151,6 +3151,13 @@ bool QC_ApplicationWindow::queryExit(bool force){
 void QC_ApplicationWindow::keyPressEvent(QKeyEvent* e)
 {
     switch (e->key()) {
+    case Qt::Key_F8:
+        if (actionHandler != nullptr) {
+            actionHandler->slotRestrictOrthogonal();
+        }
+        e->accept();
+        break;
+
     case Qt::Key_Escape:
         slotKillAllActions();
         // fall-through

@@ -53,6 +53,7 @@
 #include "rs_actionzoomscroll.h"
 #include "rs_blocklist.h"
 #include "rs_debug.h"
+#include "rs_dialogfactory.h"
 #include "rs_eventhandler.h"
 #include "rs_graphic.h"
 #include "rs_insert.h"
@@ -60,6 +61,8 @@
 #include "rs_modification.h"
 #include "rs_painterqt.h"
 #include "rs_settings.h"
+#include "rs_snapper.h"
+#include "rs_overlayline.h"
 
 #ifdef EMU_C99
 #include "emu_c99.h"
@@ -574,6 +577,24 @@ void QG_GraphicView::addEditEntityEntry(QMouseEvent* event, QMenu& contextMenu)
     });
 }
 
+RS_Vector QG_GraphicView::getSnap(const RS_Vector& pos)
+{
+    if (container == nullptr) return RS_Vector(false);
+    RS_Snapper snapper(*container, *this);
+    RS_SnapMode sm;
+    sm.snapEndpoint = true;
+    sm.snapCenter = true;
+    sm.snapIntersection = true;
+    sm.snapMiddle = true;
+    snapper.setSnapMode(sm);
+    return snapper.snapPoint(pos);
+}
+
+RS_Vector QG_GraphicView::getSnap()
+{
+    return getSnap(getMousePosition());
+}
+
 void QG_GraphicView::mouseMoveEvent(QMouseEvent* event)
 {
     if (isAutoPan(event)) {
@@ -585,6 +606,45 @@ void QG_GraphicView::mouseMoveEvent(QMouseEvent* event)
     // handle auto-panning
     event->accept();
     eventHandler->mouseMoveEvent(event);
+
+    // Snap Preview on Hover
+    if (container != nullptr) {
+        RS_Vector mousePos = toGraph(event->x(), event->y());
+        RS_Vector snapPos = getSnap(mousePos);
+
+        RS_EntityContainer* overlay = getOverlayContainer(RS2::Snapper);
+        if (overlay != nullptr) {
+            overlay->clear();
+            if (snapPos.valid && mousePos.distanceTo(snapPos) <= (32.0 / getFactor().x)) {
+                double gx = toGuiX(snapPos.x);
+                double gy = toGuiY(snapPos.y);
+                double sz = 6.0;
+
+                RS_Vector p1(gx - sz, gy - sz);
+                RS_Vector p2(gx + sz, gy - sz);
+                RS_Vector p3(gx + sz, gy + sz);
+                RS_Vector p4(gx - sz, gy + sz);
+
+                RS_Pen greenPen(RS_Color(0, 255, 0), RS2::Width02, RS2::SolidLine);
+
+                RS_OverlayLine* l1 = new RS_OverlayLine(nullptr, {p1, p2});
+                l1->setPen(greenPen);
+                RS_OverlayLine* l2 = new RS_OverlayLine(nullptr, {p2, p3});
+                l2->setPen(greenPen);
+                RS_OverlayLine* l3 = new RS_OverlayLine(nullptr, {p3, p4});
+                l3->setPen(greenPen);
+                RS_OverlayLine* l4 = new RS_OverlayLine(nullptr, {p4, p1});
+                l4->setPen(greenPen);
+
+                overlay->addEntity(l1);
+                overlay->addEntity(l2);
+                overlay->addEntity(l3);
+                overlay->addEntity(l4);
+            }
+            redraw(RS2::RedrawOverlay);
+            update();
+        }
+    }
 }
 
 bool QG_GraphicView::event(QEvent *event)
@@ -904,6 +964,19 @@ void QG_GraphicView::wheelEvent(QWheelEvent *e) {
     void QG_GraphicView::keyPressEvent(QKeyEvent * e)
     {
         if (container == nullptr) {
+            return;
+        }
+
+        if (e->key() == Qt::Key_F8) {
+            RS2::SnapRestriction res = getSnapRestriction();
+            if (res == RS2::RestrictOrthogonal) {
+                setSnapRestriction(RS2::RestrictNothing);
+                RS_DIALOGFACTORY->commandMessage(tr("Ortho Mode: OFF"));
+            } else {
+                setSnapRestriction(RS2::RestrictOrthogonal);
+                RS_DIALOGFACTORY->commandMessage(tr("Ortho Mode: ON"));
+            }
+            e->accept();
             return;
         }
 

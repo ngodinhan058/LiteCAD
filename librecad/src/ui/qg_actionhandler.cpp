@@ -1969,7 +1969,13 @@ void QG_ActionHandler::slotRestrictNothing() {
 
 void QG_ActionHandler::slotRestrictOrthogonal() {
     RS_SnapMode s = getSnaps();
-    s.restriction = RS2::RestrictOrthogonal;
+    if (s.restriction == RS2::RestrictOrthogonal) {
+        s.restriction = RS2::RestrictNothing;
+        RS_DIALOGFACTORY->commandMessage(tr("Ortho Mode: OFF"));
+    } else {
+        s.restriction = RS2::RestrictOrthogonal;
+        RS_DIALOGFACTORY->commandMessage(tr("Ortho Mode: ON"));
+    }
     slotSetSnaps(s);
 }
 
