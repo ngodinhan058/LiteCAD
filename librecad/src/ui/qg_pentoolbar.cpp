@@ -46,6 +46,7 @@ QG_PenToolBar::QG_PenToolBar( const QString & title, QWidget * parent )
             this, SLOT(slotColorChanged(const RS_Color&)));
 
     widthBox->setToolTip(tr("Line width"));
+    widthBox->setCurrentIndex(0);
 	connect(widthBox.get(), SIGNAL(widthChanged(RS2::LineWidth)),
             this, SLOT(slotWidthChanged(RS2::LineWidth)));
 

@@ -677,11 +677,11 @@ void QG_GraphicView::mouseMoveEvent(QMouseEvent* event)
     m_panData->panTimer.reset();
     event->accept();
 
-    // Passive Snap Tracking & Preview on Hover
-    RS_Vector mousePos = toGraph(event->x(), event->y());
+    // Passive Snap Tracking & Preview on Hover (tight 4px catchment radius)
+    RS_Vector mousePos = RS_GraphicView::toGraph(event->x(), event->y());
     RS_Vector snapPos = passiveTrackSnap(mousePos);
 
-    if (snapPos.valid && mousePos.distanceTo(snapPos) <= toGraphDX(32)) {
+    if (snapPos.valid && mousePos.distanceTo(snapPos) <= toGraphDX(4)) {
         this->currentMouse = snapPos;
         int snapX = qRound(toGuiX(snapPos.x));
         int snapY = qRound(toGuiY(snapPos.y));
@@ -692,12 +692,13 @@ void QG_GraphicView::mouseMoveEvent(QMouseEvent* event)
         // Hardware cursor attraction and deadzone pull-away handling
         if (m_isCursorSnapped) {
             int delta = (QCursor::pos() - m_snappedGlobalPos).manhattanLength();
-            if (delta > 20) {
+            if (delta > 10) {
                 m_isCursorSnapped = false;
+                this->currentMouse = RS_Vector(false);
             }
         } else {
             int distToSnap = (event->pos() - snapLocal).manhattanLength();
-            if (distToSnap < 16) {
+            if (distToSnap < 10) {
                 QCursor::setPos(snapGlobal);
                 m_snappedGlobalPos = snapGlobal;
                 m_isCursorSnapped = true;
@@ -770,7 +771,7 @@ void QG_GraphicView::mouseMoveEvent(QMouseEvent* event)
         redraw(RS2::RedrawOverlay);
         update();
     } else {
-        this->currentMouse = mousePos;
+        this->currentMouse = RS_Vector(false);
         m_isCursorSnapped = false;
         if (eventHandler != nullptr) {
             eventHandler->mouseMoveEvent(event);
@@ -1322,7 +1323,7 @@ RS_Vector QG_GraphicView::toGraph(int x, int y) const
 {
     if (m_isCursorSnapped && currentMouse.valid) {
         RS_Vector rawGraphPos = RS_GraphicView::toGraph(x, y);
-        if (rawGraphPos.distanceTo(currentMouse) <= toGraphDX(16)) {
+        if (rawGraphPos.distanceTo(currentMouse) <= toGraphDX(4)) {
             return currentMouse;
         } else {
             const_cast<QG_GraphicView*>(this)->m_isCursorSnapped = false;
@@ -1336,7 +1337,7 @@ RS_Vector QG_GraphicView::toGraph(const QPointF& position) const
 {
     if (m_isCursorSnapped && currentMouse.valid) {
         RS_Vector rawGraphPos = RS_GraphicView::toGraph(position);
-        if (rawGraphPos.distanceTo(currentMouse) <= toGraphDX(16)) {
+        if (rawGraphPos.distanceTo(currentMouse) <= toGraphDX(4)) {
             return currentMouse;
         } else {
             const_cast<QG_GraphicView*>(this)->m_isCursorSnapped = false;
@@ -1350,7 +1351,7 @@ RS_Vector QG_GraphicView::toGraph(const RS_Vector& v) const
 {
     if (m_isCursorSnapped && currentMouse.valid) {
         RS_Vector rawGraphPos = RS_GraphicView::toGraph(v);
-        if (rawGraphPos.distanceTo(currentMouse) <= toGraphDX(16)) {
+        if (rawGraphPos.distanceTo(currentMouse) <= toGraphDX(4)) {
             return currentMouse;
         } else {
             const_cast<QG_GraphicView*>(this)->m_isCursorSnapped = false;
@@ -1374,7 +1375,8 @@ RS_Vector QG_GraphicView::getMousePosition() const
     RS_Vector rawPos = RS_GraphicView::toGraph(vp.x(), vp.y());
 
     RS_Vector snapPos = const_cast<QG_GraphicView*>(this)->passiveTrackSnap(rawPos);
-    if (snapPos.valid && rawPos.distanceTo(snapPos) <= const_cast<QG_GraphicView*>(this)->toGraphDX(32)) {
+    if (snapPos.valid && rawPos.distanceTo(snapPos) <= const_cast<QG_GraphicView*>(this)->toGraphDX(4)) {
+        const_cast<QG_GraphicView*>(this)->currentMouse = snapPos;
         return snapPos;
     }
     return rawPos;
