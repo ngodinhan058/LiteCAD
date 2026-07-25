@@ -92,6 +92,7 @@ public:
 	RS_Vector getMousePosition() const override;
 	RS_Vector getSnap(const RS_Vector& pos);
 	RS_Vector getSnap();
+	RS_Vector passiveTrackSnap(const RS_Vector& pos);
 
     void setAntialiasing(bool state);
     void setCursorHiding(bool state);

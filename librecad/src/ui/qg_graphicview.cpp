@@ -590,9 +590,70 @@ RS_Vector QG_GraphicView::getSnap(const RS_Vector& pos)
     return snapper.snapPoint(pos);
 }
 
-RS_Vector QG_GraphicView::getSnap()
+RS_Vector QG_GraphicView::passiveTrackSnap(const RS_Vector& mousePos)
 {
-    return getSnap(getMousePosition());
+    RS_EntityContainer* ec = container;
+    if (ec == nullptr) {
+        return RS_Vector(false);
+    }
+
+    double maxDist = toGraphDX(32);
+    double dist = maxDist;
+    RS_Entity* entity = ec->getNearestEntity(mousePos, &dist);
+
+    RS_Vector bestSnap(false);
+    double bestDist = maxDist;
+
+    if (entity != nullptr) {
+        // Check Endpoint
+        double dEnd = RS_MAXDOUBLE;
+        RS_Vector pEnd = entity->getNearestEndpoint(mousePos, &dEnd);
+        if (pEnd.valid && dEnd < bestDist) {
+            bestDist = dEnd;
+            bestSnap = pEnd;
+        }
+
+        // Check Midpoint / Middle
+        double dMid = RS_MAXDOUBLE;
+        RS_Vector pMid = entity->getNearestMiddle(mousePos, &dMid);
+        if (pMid.valid && dMid < bestDist) {
+            bestDist = dMid;
+            bestSnap = pMid;
+        }
+
+        // Check Center
+        double dCen = RS_MAXDOUBLE;
+        RS_Vector pCen = entity->getNearestCenter(mousePos, &dCen);
+        if (pCen.valid && dCen < bestDist) {
+            bestDist = dCen;
+            bestSnap = pCen;
+        }
+
+        // Check Point on Entity
+        if (!bestSnap.valid) {
+            double dOn = RS_MAXDOUBLE;
+            RS_Vector pOn = entity->getNearestPointOnEntity(mousePos, true, &dOn);
+            if (pOn.valid && dOn < maxDist) {
+                bestDist = dOn;
+                bestSnap = pOn;
+            }
+        }
+    }
+
+    if (!bestSnap.valid) {
+        double dEnd = RS_MAXDOUBLE;
+        RS_Vector pEnd = ec->getNearestEndpoint(mousePos, &dEnd);
+        if (pEnd.valid && dEnd < maxDist) {
+            bestDist = dEnd;
+            bestSnap = pEnd;
+        }
+    }
+
+    if (!bestSnap.valid) {
+        bestSnap = getSnap(mousePos);
+    }
+
+    return bestSnap;
 }
 
 void QG_GraphicView::mouseMoveEvent(QMouseEvent* event)
@@ -607,43 +668,41 @@ void QG_GraphicView::mouseMoveEvent(QMouseEvent* event)
     event->accept();
     eventHandler->mouseMoveEvent(event);
 
-    // Snap Preview on Hover
-    if (container != nullptr) {
-        RS_Vector mousePos = toGraph(event->x(), event->y());
-        RS_Vector snapPos = getSnap(mousePos);
+    // Passive Snap Tracking & Preview on Hover over any line/entity (independent mode)
+    RS_Vector mousePos = toGraph(event->x(), event->y());
+    RS_Vector snapPos = passiveTrackSnap(mousePos);
 
-        RS_EntityContainer* overlay = getOverlayContainer(RS2::Snapper);
-        if (overlay != nullptr) {
-            overlay->clear();
-            if (snapPos.valid && mousePos.distanceTo(snapPos) <= (32.0 / getFactor().x)) {
-                double gx = toGuiX(snapPos.x);
-                double gy = toGuiY(snapPos.y);
-                double sz = 6.0;
+    RS_EntityContainer* overlay = getOverlayContainer(RS2::Snapper);
+    if (overlay != nullptr) {
+        overlay->clear();
+        if (snapPos.valid && mousePos.distanceTo(snapPos) <= toGraphDX(32)) {
+            double gx = toGuiX(snapPos.x);
+            double gy = toGuiY(snapPos.y);
+            double sz = 6.0;
 
-                RS_Vector p1(gx - sz, gy - sz);
-                RS_Vector p2(gx + sz, gy - sz);
-                RS_Vector p3(gx + sz, gy + sz);
-                RS_Vector p4(gx - sz, gy + sz);
+            RS_Vector p1(gx - sz, gy - sz);
+            RS_Vector p2(gx + sz, gy - sz);
+            RS_Vector p3(gx + sz, gy + sz);
+            RS_Vector p4(gx - sz, gy + sz);
 
-                RS_Pen greenPen(RS_Color(0, 255, 0), RS2::Width02, RS2::SolidLine);
+            RS_Pen greenPen(RS_Color(0, 255, 0), RS2::Width02, RS2::SolidLine);
 
-                RS_OverlayLine* l1 = new RS_OverlayLine(nullptr, {p1, p2});
-                l1->setPen(greenPen);
-                RS_OverlayLine* l2 = new RS_OverlayLine(nullptr, {p2, p3});
-                l2->setPen(greenPen);
-                RS_OverlayLine* l3 = new RS_OverlayLine(nullptr, {p3, p4});
-                l3->setPen(greenPen);
-                RS_OverlayLine* l4 = new RS_OverlayLine(nullptr, {p4, p1});
-                l4->setPen(greenPen);
+            RS_OverlayLine* l1 = new RS_OverlayLine(nullptr, {p1, p2});
+            l1->setPen(greenPen);
+            RS_OverlayLine* l2 = new RS_OverlayLine(nullptr, {p2, p3});
+            l2->setPen(greenPen);
+            RS_OverlayLine* l3 = new RS_OverlayLine(nullptr, {p3, p4});
+            l3->setPen(greenPen);
+            RS_OverlayLine* l4 = new RS_OverlayLine(nullptr, {p4, p1});
+            l4->setPen(greenPen);
 
-                overlay->addEntity(l1);
-                overlay->addEntity(l2);
-                overlay->addEntity(l3);
-                overlay->addEntity(l4);
-            }
-            redraw(RS2::RedrawOverlay);
-            update();
+            overlay->addEntity(l1);
+            overlay->addEntity(l2);
+            overlay->addEntity(l3);
+            overlay->addEntity(l4);
         }
+        redraw(RS2::RedrawOverlay);
+        update();
     }
 }
 
