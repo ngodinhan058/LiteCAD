@@ -2014,7 +2014,9 @@ void QC_ApplicationWindow::
         statusBar()->showMessage(tr("Opening aborted"), 2000);
     }
 
-    QApplication::restoreOverrideCursor();
+    while (QApplication::overrideCursor()) {
+        QApplication::restoreOverrideCursor();
+    }
     RS_DEBUG->print("QC_ApplicationWindow::slotFileOpen(..) OK");
 }
 

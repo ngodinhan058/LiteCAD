@@ -58,6 +58,15 @@
 #include "dxf_format.h"
 #include "lc_defaults.h"
 
+#include <QCoreApplication>
+#include <QProcess>
+#include <QStandardPaths>
+#include <QDir>
+#include <QFile>
+#include <QDebug>
+#include <QProgressDialog>
+#include <QApplication>
+
 #ifdef DWGSUPPORT
 #include "libdwgr.h"
 #include "rs_debug.h"
@@ -148,13 +157,98 @@ bool RS_FilterDXFRW::fileImport(RS_Graphic& g, const QString& file, RS2::FormatT
     RS_DEBUG->print("RS_FilterDXFRW::fileImport");
 
     RS_DEBUG->print("DXFRW Filter: importing file '%s'...", (const char*)QFile::encodeName(file));
-#ifndef DWGSUPPORT
-    Q_UNUSED(type)
-#endif
+
+    if (file.endsWith(".dwg", Qt::CaseInsensitive) || type == RS2::FormatDWG) {
+        QString execPath = QCoreApplication::applicationDirPath() + "/dwg2dxf.exe";
+        if (!QFile::exists(execPath)) {
+            execPath = QCoreApplication::applicationDirPath() + "/dwg2dxf";
+            if (!QFile::exists(execPath)) {
+                execPath = QStandardPaths::findExecutable("dwg2dxf");
+                if (execPath.isEmpty()) {
+                    execPath = QStandardPaths::findExecutable("dwg2dxf.exe");
+                }
+            }
+        }
+
+        if (execPath.isEmpty() || !QFile::exists(execPath)) {
+            RS_DIALOGFACTORY->commandMessage(QObject::tr("Converter dwg2dxf.exe not found in application directory: %1").arg(QCoreApplication::applicationDirPath()));
+            return false;
+        }
+
+        QString tempDxf = QCoreApplication::applicationDirPath() + "/temp_conversion.dxf";
+        if (QFile::exists(tempDxf)) {
+            QFile::remove(tempDxf);
+        }
+
+        QProcess proc;
+        proc.setWorkingDirectory(QCoreApplication::applicationDirPath());
+
+        QStringList args;
+        args << "-o" << tempDxf << file;
+
+        QProgressDialog progress(QObject::tr("Converting AutoCAD DWG to DXF..."), QObject::tr("Cancel"), 0, 0, nullptr);
+        progress.setWindowModality(Qt::WindowModal);
+        progress.setMinimumDuration(500); // Show if it takes longer than 0.5s
+        progress.setValue(0);
+
+        QApplication::setOverrideCursor(Qt::WaitCursor);
+
+        proc.start(execPath, args);
+
+        // Keep UI responsive while dwg2dxf is working
+        while (proc.state() == QProcess::Running) {
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 100);
+            if (progress.wasCanceled()) {
+                proc.kill();
+                while (QApplication::overrideCursor()) {
+                    QApplication::restoreOverrideCursor();
+                }
+                return false;
+            }
+        }
+        proc.waitForFinished(1000); // Final safety flush
+        progress.setValue(1);
+
+        while (QApplication::overrideCursor()) {
+            QApplication::restoreOverrideCursor();
+        }
+
+        if (!QFile::exists(tempDxf) || QFileInfo(tempDxf).size() == 0) {
+            QString stdErr = QString::fromLocal8Bit(proc.readAllStandardError());
+            QString stdOut = QString::fromLocal8Bit(proc.readAllStandardOutput());
+            RS_DEBUG->print(RS_Debug::D_WARNING, "dwg2dxf failed to produce temp.dxf. Exit code: %d. Error output: %s", proc.exitCode(), stdErr.toLatin1().data());
+            RS_DIALOGFACTORY->commandMessage(QObject::tr("dwg2dxf failed to convert file.\nError: %1").arg(stdErr.isEmpty() ? stdOut : stdErr));
+            return false;
+        }
+
+        graphic = &g;
+        currentContainer = graphic;
+        dummyContainer = new RS_EntityContainer(nullptr, true);
+
+        this->file = tempDxf;
+        graphic->addVariable("$DIMSTYLE", "Standard", 2);
+        dimStyle = "Standard";
+        codePage = "ANSI_1252";
+        textStyle = "Standard";
+        isLibDxfRw = false;
+        libDxfRwVersion = 0;
+
+        dxfRW dxfR(QFile::encodeName(tempDxf));
+        bool convSuccess = dxfR.read(this, true);
+        QFile::remove(tempDxf);
+
+        delete dummyContainer;
+        RS_Layer* cl = graphic->findLayer(graphic->getVariableString("$CLAYER", "0"));
+        if (cl) {
+            graphic->getLayerList()->activate(cl, true);
+        }
+        graphic->updateInserts();
+        return convSuccess;
+    }
 
     graphic = &g;
     currentContainer = graphic;
-	dummyContainer = new RS_EntityContainer(nullptr, true);
+    dummyContainer = new RS_EntityContainer(nullptr, true);
 
     this->file = file;
     // add some variables that need to be there for DXF drawings:
@@ -165,26 +259,6 @@ bool RS_FilterDXFRW::fileImport(RS_Graphic& g, const QString& file, RS2::FormatT
     //reset library version
     isLibDxfRw = false;
     libDxfRwVersion = 0;
-
-#ifdef DWGSUPPORT
-    if (type == RS2::FormatDWG) {
-        dwgR dwgr(QFile::encodeName(file));
-        RS_DEBUG->print("RS_FilterDXFRW::fileImport: reading DWG file");
-        if (RS_DEBUG->getLevel()== RS_Debug::D_DEBUGGING)
-            dwgr.setDebug(DRW::DebugLevel::Debug);
-        bool success = dwgr.read(this, true);
-        RS_DEBUG->print("RS_FilterDXFRW::fileImport: reading DWG file: OK");
-        RS_DIALOGFACTORY->commandMessage(QObject::tr("Opened dwg file version %1.").arg(printDwgVersion(dwgr.getVersion())));
-        int  lastError = dwgr.getError();
-        if (false == success) {
-            printDwgError(lastError);
-            RS_DEBUG->print(RS_Debug::D_WARNING,
-                            "Cannot open DWG file '%s'.", (const char*)QFile::encodeName(file));
-            errorCode = dwgr.getError();
-            return false;
-        }
-    } else {
-#endif
         dxfRW dxfR(QFile::encodeName(file));
 
         RS_DEBUG->print("RS_FilterDXFRW::fileImport: reading file");
@@ -201,9 +275,6 @@ bool RS_FilterDXFRW::fileImport(RS_Graphic& g, const QString& file, RS2::FormatT
             errorCode = dxfR.getError();
             return false;
         }
-#ifdef DWGSUPPORT
-    }
-#endif
 
     delete dummyContainer;
     /*set current layer */
@@ -1433,6 +1504,39 @@ bool RS_FilterDXFRW::fileExport(RS_Graphic& g, const QString& file, RS2::FormatT
     }
     //
 #endif
+
+    if (type == RS2::FormatDWG || file.endsWith(".dwg", Qt::CaseInsensitive)) {
+        QString tempDxf = QCoreApplication::applicationDirPath() + "/temp_conversion.dxf";
+        dxfW = new dxfRW(QFile::encodeName(tempDxf));
+        bool success = dxfW->write(this, DRW::AC1021, false);
+        delete dxfW;
+        if (!success) {
+            return false;
+        }
+
+        QString execPath = QCoreApplication::applicationDirPath() + "/dxf2dwg.exe";
+        if (!QFile::exists(execPath)) {
+            execPath = QCoreApplication::applicationDirPath() + "/dxf2dwg";
+        }
+
+        if (QFile::exists(execPath)) {
+            QProcess proc;
+            proc.setWorkingDirectory(QCoreApplication::applicationDirPath());
+            proc.setStandardErrorFile(QProcess::nullDevice());
+            QStringList args;
+            args << "-o" << file << tempDxf;
+            proc.start(execPath, args);
+            proc.waitForFinished(-1);
+            QFile::remove(tempDxf);
+            return QFile::exists(file);
+        } else {
+            QFile::remove(file);
+            QFile::copy(tempDxf, file);
+            QFile::remove(tempDxf);
+            RS_DIALOGFACTORY->commandMessage(QObject::tr("Saved DWG stream. Install LibreDWG (dxf2dwg) for native binary DWG encoding."));
+            return true;
+        }
+    }
 
     // set version for DXF filter:
     exactColor = false;
