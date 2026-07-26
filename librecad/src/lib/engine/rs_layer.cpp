@@ -45,7 +45,7 @@ RS_LayerData::RS_LayerData(const QString& name,
  * Constructor.
  */
 RS_Layer::RS_Layer(const QString& name):
-    data(name, RS_Pen(Qt::black, name == "0" ? RS2::Width07 : RS2::Width00,RS2::SolidLine), false, false)
+    data(name, RS_Pen(Qt::black, RS2::Width00, RS2::SolidLine), false, false)
 {
     LC_ERR<<name;
 }

@@ -247,6 +247,7 @@ void QG_WidthBox::setLayerWidth(RS2::LineWidth w) {
         setItemText(0, tr("By Layer"));
 
         // needed for the first time a layer is added:
+        setCurrentIndex(0);
         slotWidthChanged(currentIndex());
     }
 }

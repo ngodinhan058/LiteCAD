@@ -80,17 +80,9 @@ void QG_PenToolBar::layerActivated(RS_Layer* l) {
 
 	if (l==nullptr) return;
 
-    //colorBox->setColor(l->getPen().getColor());
-    //widthBox->setWidth(l->getPen().getWidth());
-
-    colorBox->setLayerColor(l->getPen().getColor());
-    widthBox->setLayerWidth(l->getPen().getWidth());
-    lineTypeBox->setLayerLineType(l->getPen().getLineType());
-
-    //if (colorBox->getColor().getFlag(C_BY_LAYER)) {
-    //printf("  Color by layer\n");
-    //colorBox->setColor(l->getPen().getColor());
-    //}
+    setLayerColor(l->getPen().getColor(), true);
+    setLayerWidth(l->getPen().getWidth(), true);
+    setLayerLineType(l->getPen().getLineType(), true);
 }
 
 void QG_PenToolBar::setLayerColor(RS_Color color, bool updateSelection){
