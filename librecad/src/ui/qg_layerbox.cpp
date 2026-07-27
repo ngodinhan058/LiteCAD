@@ -87,7 +87,6 @@ void QG_LayerBox::init(RS_LayerList& layerList,
 }
 
 
-
 /**
  * Sets the layer shown in the combobox to the given layer.
  */
@@ -151,5 +150,3 @@ void QG_LayerBox::slotLayerChanged(int index) {
 
     emit layerChanged(currentLayer);
 }
-
-

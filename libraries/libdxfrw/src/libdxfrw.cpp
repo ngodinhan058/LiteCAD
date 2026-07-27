@@ -2339,12 +2339,15 @@ bool dxfRW::processEntities(bool isblock) {
         } else if (nextentity == "XLINE") {
             processed = processXline();
         } else {
-            if (!reader->readRec(&code)) {
-                return setError(DRW::BAD_READ_ENTITIES); //end of file without ENDSEC
+            // Fast skip unknown entity records until next group 0 marker
+            while (reader->readRec(&code)) {
+                if (code == 0) {
+                    nextentity = reader->getString();
+                    break;
+                }
             }
-
-            if (code == 0) {
-                nextentity = reader->getString();
+            if (code != 0) {
+                return setError(DRW::BAD_READ_ENTITIES); // end of file without ENDSEC
             }
             processed = true;
         }
@@ -2894,12 +2897,15 @@ bool dxfRW::processObjects() {
             processed = processPlotSettings();
         }
         else {
-            if (!reader->readRec(&code)) {
-                return setError(DRW::BAD_READ_OBJECTS); //end of file without ENDSEC
+            // Fast skip unknown object records until next group 0 marker
+            while (reader->readRec(&code)) {
+                if (code == 0) {
+                    nextentity = reader->getString();
+                    break;
+                }
             }
-
-            if (code == 0) {
-                nextentity = reader->getString();
+            if (code != 0) {
+                return setError(DRW::BAD_READ_OBJECTS); // end of file without ENDSEC
             }
             processed = true;
         }

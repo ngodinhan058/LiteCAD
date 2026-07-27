@@ -51,6 +51,7 @@ class RS_Image;
 class RS_Leader;
 class RS_Polyline;
 class DL_WriterA;
+class QProgressDialog;
 
 /**
  * This format filter class can import and export DXF files.
@@ -235,6 +236,9 @@ private:
     QHash<int, RS_EntityContainer*> blockHash;
     /** Pointer to entity container to store possible orphan entities like paper space */
     RS_EntityContainer* dummyContainer;
+    QProgressDialog* m_progressDialog{nullptr};
+    int m_entityCount{0};
+    void checkProgressEvents();
 };
 
 #endif

@@ -175,51 +175,78 @@ bool RS_FilterDXFRW::fileImport(RS_Graphic& g, const QString& file, RS2::FormatT
             return false;
         }
 
-        QString tempDxf = QCoreApplication::applicationDirPath() + "/temp_conversion.dxf";
+        QString tempDxf = QDir::tempPath() + "/librecad_temp_conversion.dxf";
         if (QFile::exists(tempDxf)) {
             QFile::remove(tempDxf);
         }
 
         QProcess proc;
-        proc.setWorkingDirectory(QCoreApplication::applicationDirPath());
+        proc.setWorkingDirectory(QDir::tempPath());
 
         QStringList args;
-        args << "-o" << tempDxf << file;
+        args << "-y" << "-v0" << "-o" << tempDxf << file;
 
         QProgressDialog progress(QObject::tr("Converting AutoCAD DWG to DXF..."), QObject::tr("Cancel"), 0, 0, nullptr);
         progress.setWindowModality(Qt::WindowModal);
-        progress.setMinimumDuration(500); // Show if it takes longer than 0.5s
+        progress.setMinimumDuration(100);
         progress.setValue(0);
+        QCoreApplication::processEvents();
 
         QApplication::setOverrideCursor(Qt::WaitCursor);
 
         proc.start(execPath, args);
+        proc.closeWriteChannel();
 
-        // Keep UI responsive while dwg2dxf is working
-        while (proc.state() == QProcess::Running) {
-            QCoreApplication::processEvents(QEventLoop::AllEvents, 100);
+        QByteArray stdOutData;
+        QByteArray stdErrData;
+        const int maxBufSize = 65536;
+
+        while (!proc.waitForFinished(50)) {
+            QByteArray outChunk = proc.readAllStandardOutput();
+            if (!outChunk.isEmpty()) {
+                stdOutData.append(outChunk);
+                if (stdOutData.size() > maxBufSize) {
+                    stdOutData = stdOutData.right(maxBufSize);
+                }
+            }
+            QByteArray errChunk = proc.readAllStandardError();
+            if (!errChunk.isEmpty()) {
+                stdErrData.append(errChunk);
+                if (stdErrData.size() > maxBufSize) {
+                    stdErrData = stdErrData.right(maxBufSize);
+                }
+            }
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
             if (progress.wasCanceled()) {
                 proc.kill();
+                proc.waitForFinished(500);
                 while (QApplication::overrideCursor()) {
                     QApplication::restoreOverrideCursor();
+                }
+                if (QFile::exists(tempDxf)) {
+                    QFile::remove(tempDxf);
                 }
                 return false;
             }
         }
-        proc.waitForFinished(1000); // Final safety flush
-        progress.setValue(1);
-
-        while (QApplication::overrideCursor()) {
-            QApplication::restoreOverrideCursor();
-        }
+        stdOutData.append(proc.readAllStandardOutput());
+        stdErrData.append(proc.readAllStandardError());
 
         if (!QFile::exists(tempDxf) || QFileInfo(tempDxf).size() == 0) {
-            QString stdErr = QString::fromLocal8Bit(proc.readAllStandardError());
-            QString stdOut = QString::fromLocal8Bit(proc.readAllStandardOutput());
+            while (QApplication::overrideCursor()) {
+                QApplication::restoreOverrideCursor();
+            }
+            progress.close();
+            QString stdOut = QString::fromLocal8Bit(stdOutData);
+            QString stdErr = QString::fromLocal8Bit(stdErrData);
             RS_DEBUG->print(RS_Debug::D_WARNING, "dwg2dxf failed to produce temp.dxf. Exit code: %d. Error output: %s", proc.exitCode(), stdErr.toLatin1().data());
             RS_DIALOGFACTORY->commandMessage(QObject::tr("dwg2dxf failed to convert file.\nError: %1").arg(stdErr.isEmpty() ? stdOut : stdErr));
             return false;
         }
+
+        progress.setLabelText(QObject::tr("Loading converted DXF..."));
+        progress.setValue(1);
+        QCoreApplication::processEvents();
 
         graphic = &g;
         currentContainer = graphic;
@@ -234,15 +261,37 @@ bool RS_FilterDXFRW::fileImport(RS_Graphic& g, const QString& file, RS2::FormatT
         libDxfRwVersion = 0;
 
         dxfRW dxfR(QFile::encodeName(tempDxf));
+        m_progressDialog = &progress;
+        m_entityCount = 0;
         bool convSuccess = dxfR.read(this, true);
-        QFile::remove(tempDxf);
-
+        m_progressDialog = nullptr;
+        if (!convSuccess && (!graphic->isEmpty() || graphic->countBlocks() > 0)) {
+            convSuccess = true;
+        }
+        if (dummyContainer && dummyContainer->count() > 0) {
+            for (RS_Entity* e = dummyContainer->firstEntity(RS2::ResolveNone); e; ) {
+                RS_Entity* next = dummyContainer->nextEntity(RS2::ResolveNone);
+                dummyContainer->removeEntity(e);
+                e->reparent(graphic);
+                graphic->addEntity(e);
+                e = next;
+            }
+        }
         delete dummyContainer;
         RS_Layer* cl = graphic->findLayer(graphic->getVariableString("$CLAYER", "0"));
         if (cl) {
             graphic->getLayerList()->activate(cl, true);
         }
+        progress.setLabelText(QObject::tr("Updating block inserts..."));
+        QCoreApplication::processEvents();
         graphic->updateInserts();
+        graphic->calculateBorders();
+        m_progressDialog = nullptr;
+
+        while (QApplication::overrideCursor()) {
+            QApplication::restoreOverrideCursor();
+        }
+        progress.close();
         return convSuccess;
     }
 
@@ -266,6 +315,9 @@ bool RS_FilterDXFRW::fileImport(RS_Graphic& g, const QString& file, RS2::FormatT
             dxfR.setDebug(DRW::DebugLevel::Debug);
         }
         bool success = dxfR.read(this, true);
+        if (!success && (!graphic->isEmpty() || graphic->countBlocks() > 0)) {
+            success = true;
+        }
         RS_DEBUG->print("RS_FilterDXFRW::fileImport: reading file: OK");
         //graphic->setAutoUpdateBorders(true);
 
@@ -285,6 +337,7 @@ bool RS_FilterDXFRW::fileImport(RS_Graphic& g, const QString& file, RS2::FormatT
     }
     RS_DEBUG->print("RS_FilterDXFRW::fileImport: updating inserts");
     graphic->updateInserts();
+    graphic->calculateBorders();
 
     RS_DEBUG->print("RS_FilterDXFRW::fileImport OK");
 
@@ -300,7 +353,7 @@ void RS_FilterDXFRW::addLayer(const DRW_Layer &data) {
 
     RS_DEBUG->print("RS_FilterDXF::addLayer: creating layer");
 
-    QString name = QString::fromUtf8(data.name.c_str());
+    QString name = toNativeString(QString::fromUtf8(data.name.c_str()));
     if (name != "0" && graphic->findLayer(name)) {
         return;
     }
@@ -309,9 +362,6 @@ void RS_FilterDXFRW::addLayer(const DRW_Layer &data) {
     layer->setPen(attributesToPen(&data));
 
     RS_DEBUG->print("RS_FilterDXF::addLayer: flags");
-    if (data.flags&0x01) {
-        layer->freeze(true);
-    }
     if (data.flags&0x04) {
         layer->lock(true);
     }
@@ -402,29 +452,27 @@ void RS_FilterDXFRW::addBlock(const DRW_Block& data) {
     RS_DEBUG->print("RS_FilterDXF::addBlock");
 
     RS_DEBUG->print("  adding block: %s", data.name.c_str());
-/*TODO correct handle of model-space*/
 
     QString name = QString::fromUtf8(data.name.c_str());
-    QString mid = name.mid(1,11);
-// Prevent special blocks (paper_space, model_space) from being added:
-    if (mid.toLower() != "paper_space" && mid.toLower() != "model_space") {
+    QString nameLower = name.toLower();
+
+// Prevent special blocks (paper_space, model_space) from being added to block list, but direct their entities:
+    if (!nameLower.contains("paper_space") && !nameLower.contains("model_space")) {
 
             RS_Vector bp(data.basePoint.x, data.basePoint.y);
             RS_Block* block =
                 new RS_Block(graphic, RS_BlockData(name, bp, false ));
-            //block->setFlags(flags);
 
             if (graphic->addBlock(block)) {
                 currentContainer = block;
                 blockHash.insert(data.parentHandle, currentContainer);
-            } else
+            } else {
+                currentContainer = dummyContainer;
                 blockHash.insert(data.parentHandle, dummyContainer);
+            }
     } else {
-        if (mid.toLower() == "model_space") {
-            blockHash.insert(data.parentHandle, graphic);
-        } else {
-            blockHash.insert(data.parentHandle, dummyContainer);
-        }
+        currentContainer = graphic;
+        blockHash.insert(data.parentHandle, graphic);
     }
 }
 
@@ -440,14 +488,6 @@ void RS_FilterDXFRW::setBlock(const int handle){
  * Implementation of the method which closes blocks.
  */
 void RS_FilterDXFRW::endBlock() {
-    if (currentContainer->rtti() == RS2::EntityBlock) {
-        RS_Block *bk = (RS_Block *)currentContainer;
-        //remove unnamed blocks *D only if version != R12
-        if (version!=1009) {
-            if (bk->getName().startsWith("*D") )
-                graphic->removeBlock(bk);
-        }
-    }
     currentContainer = graphic;
 }
 
@@ -1506,7 +1546,7 @@ bool RS_FilterDXFRW::fileExport(RS_Graphic& g, const QString& file, RS2::FormatT
 #endif
 
     if (type == RS2::FormatDWG || file.endsWith(".dwg", Qt::CaseInsensitive)) {
-        QString tempDxf = QCoreApplication::applicationDirPath() + "/temp_conversion.dxf";
+        QString tempDxf = QDir::tempPath() + "/librecad_temp_conversion.dxf";
         dxfW = new dxfRW(QFile::encodeName(tempDxf));
         bool success = dxfW->write(this, DRW::AC1021, false);
         delete dxfW;
@@ -1517,14 +1557,20 @@ bool RS_FilterDXFRW::fileExport(RS_Graphic& g, const QString& file, RS2::FormatT
         QString execPath = QCoreApplication::applicationDirPath() + "/dxf2dwg.exe";
         if (!QFile::exists(execPath)) {
             execPath = QCoreApplication::applicationDirPath() + "/dxf2dwg";
+            if (!QFile::exists(execPath)) {
+                execPath = QStandardPaths::findExecutable("dxf2dwg");
+                if (execPath.isEmpty()) {
+                    execPath = QStandardPaths::findExecutable("dxf2dwg.exe");
+                }
+            }
         }
 
-        if (QFile::exists(execPath)) {
+        if (QFile::exists(execPath) && !execPath.isEmpty()) {
             QProcess proc;
-            proc.setWorkingDirectory(QCoreApplication::applicationDirPath());
+            proc.setWorkingDirectory(QDir::tempPath());
             proc.setStandardErrorFile(QProcess::nullDevice());
             QStringList args;
-            args << "-o" << file << tempDxf;
+            args << "-y" << "-v0" << "-o" << file << tempDxf;
             proc.start(execPath, args);
             proc.waitForFinished(-1);
             QFile::remove(tempDxf);
@@ -3133,12 +3179,23 @@ void RS_FilterDXFRW::writeImage(RS_Image * i) {
 }*/
 
 
+void RS_FilterDXFRW::checkProgressEvents() {
+    m_entityCount++;
+    if (m_entityCount % 1000 == 0) {
+        if (m_progressDialog) {
+            m_progressDialog->setLabelText(QObject::tr("Loading converted DXF (%1 entities)...").arg(m_entityCount));
+        }
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 5);
+    }
+}
+
 /**
  * Sets the entities attributes according to the attributes
  * that come from a DXF file.
  */
 void RS_FilterDXFRW::setEntityAttributes(RS_Entity* entity,
                                        const DRW_Entity* attrib) {
+    checkProgressEvents();
     RS_DEBUG->print("RS_FilterDXF::setEntityAttributes");
 
     RS_Pen pen;
@@ -3826,21 +3883,39 @@ QString RS_FilterDXFRW::toDxfString(const QString& str) {
 QString RS_FilterDXFRW::toNativeString(const QString& data) {
     QString res;
 
+    // Decode \U+XXXX unicode escape sequences:
+    QString input = data;
+    int uPos = 0;
+    while ((uPos = input.indexOf("\\U+", uPos, Qt::CaseInsensitive)) != -1) {
+        if (uPos + 7 <= input.length()) {
+            QString hexStr = input.mid(uPos + 3, 4);
+            bool ok = false;
+            ushort ucode = hexStr.toUShort(&ok, 16);
+            if (ok) {
+                input.replace(uPos, 7, QChar(ucode));
+            } else {
+                uPos += 3;
+            }
+        } else {
+            break;
+        }
+    }
+
     // Ignore font tags:
     int j = 0;
-    for (int i=0; i<data.length(); ++i) {
-        if (data.at(i).unicode() == 0x7B){ //is '{' ?
-            if (data.at(i+1).unicode() == 0x5c){ //and is "{\" ?
+    for (int i=0; i<input.length(); ++i) {
+        if (input.at(i).unicode() == 0x7B){ //is '{' ?
+            if (i+1 < input.length() && input.at(i+1).unicode() == 0x5c){ //and is "{\" ?
                 //check known codes
-                if ( (data.at(i+2).unicode() == 0x66) || //is "\f" ?
-                     (data.at(i+2).unicode() == 0x48) || //is "\H" ?
-                     (data.at(i+2).unicode() == 0x43)    //is "\C" ?
-                   ) {
+                if (i+2 < input.length() && ((input.at(i+2).unicode() == 0x66) || //is "\f" ?
+                     (input.at(i+2).unicode() == 0x48) || //is "\H" ?
+                     (input.at(i+2).unicode() == 0x43)))   //is "\C" ?
+                   {
                     //found tag, append parsed part
-                    res.append(data.mid(j,i-j));
-                    int pos = data.indexOf(0x7D, i+3);//find '}'
+                    res.append(input.mid(j,i-j));
+                    int pos = input.indexOf(0x7D, i+3);//find '}'
                     if (pos <0) break; //'}' not found
-                    QString tmp = data.mid(i+1, pos-i-1);
+                    QString tmp = input.mid(i+1, pos-i-1);
                     do {
                         tmp = tmp.remove(0,tmp.indexOf(0x3B, 0)+1 );//remove to ';'
                     } while(tmp.startsWith("\\f") || tmp.startsWith("\\H") || tmp.startsWith("\\C"));
@@ -3851,7 +3926,7 @@ QString RS_FilterDXFRW::toNativeString(const QString& data) {
             }
         }
     }
-    res.append(data.mid(j));
+    res.append(input.mid(j));
 
     // Line feed:
     res = res.replace(QRegExp("\\\\P"), "\n");
