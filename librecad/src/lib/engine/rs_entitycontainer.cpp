@@ -25,7 +25,10 @@
 **********************************************************************/
 
 #include <cmath>
-#include <iostream>
+#include <QCoreApplication>
+#include <QEventLoop>
+#include <QThread>
+#include <QTextStream>
 #include <set>
 
 #include <QtGlobal>
@@ -1641,6 +1644,11 @@ bool RS_EntityContainer::optimizeContours() {
     RS_Entity* next = nullptr;
     /** connect entities **/
     while (count()>0) {
+        if (count() % 100 == 0) {
+            if (QThread::currentThread() == QCoreApplication::instance()->thread()) {
+                QCoreApplication::processEvents(QEventLoop::AllEvents, 5);
+            }
+        }
         double dist = 0.;
         RS_Vector vpTmp = getNearestEndpoint(vpEnd,&dist,&next);
         if (dist > contourTolerance) {

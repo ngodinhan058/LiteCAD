@@ -238,6 +238,9 @@ private:
     RS_EntityContainer* dummyContainer;
     QProgressDialog* m_progressDialog{nullptr};
     int m_entityCount{0};
+    QList<RS_Hatch*> unvalidatedHatches;
+    QHash<QString, RS_Layer*> m_layerCache;
+    QHash<QString, RS2::LineType> m_linetypeCache;
     void checkProgressEvents();
 };
 

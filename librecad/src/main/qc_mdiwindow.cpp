@@ -335,12 +335,11 @@ bool QC_MDIWindow::slotFileOpen(const QString& fileName, RS2::FormatType type) {
 
             if (fileName.endsWith(".lff") || fileName.endsWith(".cxf")) {
                 drawChars();
+            }
 
-                RS_DEBUG->print("QC_MDIWindow::slotFileOpen: autoZoom");
-                graphicView->zoomAuto(false);
-                RS_DEBUG->print("QC_MDIWindow::slotFileOpen: autoZoom: OK");
-            } else
-                graphicView->redraw();
+            RS_DEBUG->print("QC_MDIWindow::slotFileOpen: autoZoom");
+            graphicView->zoomAuto(false);
+            RS_DEBUG->print("QC_MDIWindow::slotFileOpen: autoZoom: OK");
         } else {
             RS_DEBUG->print("QC_MDIWindow::slotFileOpen: failed");
         }
