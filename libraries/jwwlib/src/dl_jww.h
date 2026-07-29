@@ -334,6 +334,8 @@ public:
 	void CreateSunpou(DL_CreationInterface* creationInterface, CDataSunpou& DSunpou);
 	void CreateBlock(DL_CreationInterface* creationInterface, CDataBlock& DBlock);
 
+    string getLayerName(int gLayer, int layer);
+
 private:
     DL_Codes::version version;
     unsigned long styleHandleStd;
@@ -387,6 +389,7 @@ private:
     bool firstCall;
     // Attributes of the current entity (layer, color, width, line type)
     DL_Attributes attrib;
+    JWWDocument* m_jwdoc;
 	// library version. hex: 0x20003001 = 2.0.3.1
 	int libVersion;
 };

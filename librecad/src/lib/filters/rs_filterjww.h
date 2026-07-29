@@ -212,7 +212,7 @@ private:
 	/** File name. Used to find out the full path of images. */
 	QString file;
     /** string for concatinating text parts of MTEXT entities. */
-    QString mtext;
+    std::string mtext;
     /** Pointer to current polyline entity we're adding vertices to. */
     RS_Polyline* polyline = nullptr;
     /** Pointer to current spline entity we're adding control points to. */

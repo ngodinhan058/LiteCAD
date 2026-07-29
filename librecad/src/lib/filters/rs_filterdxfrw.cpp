@@ -348,8 +348,8 @@ bool RS_FilterDXFRW::fileImport(RS_Graphic& g, const QString& file, RS2::FormatT
         QCoreApplication::processEvents();
 
         graphic = &g;
-        currentContainer = graphic;
-        dummyContainer = new RS_EntityContainer(nullptr, true);
+        dummyContainer = new RS_EntityContainer(nullptr, false);
+        currentContainer = dummyContainer;
 
         this->file = tempDxf;
         graphic->addVariable("$DIMSTYLE", "Standard", 2);
@@ -400,12 +400,9 @@ bool RS_FilterDXFRW::fileImport(RS_Graphic& g, const QString& file, RS2::FormatT
         }
 
         if (dummyContainer && dummyContainer->count() > 0) {
-            for (RS_Entity* e = dummyContainer->firstEntity(RS2::ResolveNone); e; ) {
-                RS_Entity* next = dummyContainer->nextEntity(RS2::ResolveNone);
-                dummyContainer->removeEntity(e);
+            for (RS_Entity* e : dummyContainer->getEntityList()) {
                 e->reparent(graphic);
-                graphic->addEntity(e);
-                e = next;
+                graphic->appendEntity(e);
             }
         }
         delete dummyContainer;
@@ -439,8 +436,8 @@ bool RS_FilterDXFRW::fileImport(RS_Graphic& g, const QString& file, RS2::FormatT
     }
 
     graphic = &g;
-    currentContainer = graphic;
-    dummyContainer = new RS_EntityContainer(nullptr, true);
+    dummyContainer = new RS_EntityContainer(nullptr, false);
+    currentContainer = dummyContainer;
 
     this->file = file;
     // add some variables that need to be there for DXF drawings:
@@ -528,6 +525,12 @@ bool RS_FilterDXFRW::fileImport(RS_Graphic& g, const QString& file, RS2::FormatT
             return false;
         }
 
+    if (dummyContainer && dummyContainer->count() > 0) {
+        for (RS_Entity* e : dummyContainer->getEntityList()) {
+            e->reparent(graphic);
+            graphic->appendEntity(e);
+        }
+    }
     delete dummyContainer;
     /*set current layer */
     RS_Layer* cl = graphic->findLayer(graphic->getVariableString("$CLAYER", "0"));
@@ -3414,7 +3417,7 @@ void RS_FilterDXFRW::writeImage(RS_Image * i) {
 
 void RS_FilterDXFRW::checkProgressEvents() {
     m_entityCount++;
-    if (m_entityCount % 1000 == 0) {
+    if (m_entityCount % 2000 == 0) {
         if (m_progressDialog) {
             m_progressDialog->setLabelText(QObject::tr("Loading converted DXF (%1 entities)...").arg(m_entityCount));
         }
