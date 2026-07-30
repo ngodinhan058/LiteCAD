@@ -1109,6 +1109,8 @@ void RS_FilterDXFRW::addMText(const DRW_MText& data) {
         } else {
             sty = textStyle;
         }
+    } else if (sty.compare("Standard", Qt::CaseInsensitive) == 0 && (codePage=="ANSI_932" || codePage=="ANSI_1251")) {
+        sty = "Unicode";
     } else {
         sty = fontList.value(sty, sty);
     }
@@ -1199,6 +1201,8 @@ void RS_FilterDXFRW::addText(const DRW_Text& data) {
         } else {
             sty = textStyle;
         }
+    } else if (sty.compare("Standard", Qt::CaseInsensitive) == 0 && (codePage=="ANSI_932" || codePage=="ANSI_1251")) {
+        sty = "Unicode";
     } else {
         sty = fontList.value(sty, sty);
     }

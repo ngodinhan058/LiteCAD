@@ -14,6 +14,9 @@ build/
 cmake-build-debug/
 appdir/
 unix/
+AI_PROGRESS.md
+DWG_READ_FLOW.md
+external\libredwg
 windows/
 release/
 debug/

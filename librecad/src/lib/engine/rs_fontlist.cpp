@@ -119,8 +119,11 @@ RS_Font* RS_FontList::requestFont(const QString& name) {
         }
     }
 
-	if (!foundFont && name!="standard") {
-        foundFont = requestFont("standard");
+	if (!foundFont && name!="unicode") {
+        foundFont = requestFont("unicode");
+        if (!foundFont && name!="standard") {
+            foundFont = requestFont("standard");
+        }
     }
 
     return foundFont;
