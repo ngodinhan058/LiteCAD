@@ -136,10 +136,22 @@ void DL_Jww::CreateSen(DL_CreationInterface* creationInterface, CDataSen& DSen)
 	else
 		width = DSen.m_nPenWidth;
 	int color = (DSen.m_nPenColor < ArraySize(colTable)) ? colTable[DSen.m_nPenColor] : DSen.m_nPenColor;
+    if (color == 256) color = 7;
     int color24 = -1;
-    if (DSen.m_nPenColor >= 1 && DSen.m_nPenColor <= 9 && DSen.m_nPenColor != 2 && m_jwdoc) {
-        int c = m_jwdoc->Header.m_Pen[DSen.m_nPenColor].m_m_aPenColor;
-        color24 = ((c & 0xFF) << 16) | (c & 0xFF00) | ((c >> 16) & 0xFF);
+    if (m_jwdoc) {
+        int c = -1;
+        if (DSen.m_nPenColor >= 1 && DSen.m_nPenColor <= 9) {
+            c = m_jwdoc->Header.m_Pen[DSen.m_nPenColor].m_m_aPenColor;
+        } else if (DSen.m_nPenColor >= 10 && DSen.m_nPenColor <= 256) {
+            c = m_jwdoc->Header.m_SxfCol.m_aPenColor[DSen.m_nPenColor];
+        }
+        if (c != -1) {
+            color24 = ((c & 0xFF) << 16) | (c & 0xFF00) | ((c >> 16) & 0xFF);
+            if (color24 == 0x000000 || color24 == 0xFFFFFF) {
+                color24 = -1;
+                color = 7;
+            }
+        }
     }
 	attrib = DL_Attributes(lName,	  // layer
 			       color,	      // color
@@ -223,10 +235,22 @@ void DL_Jww::CreateEnko(DL_CreationInterface* creationInterface, CDataEnko& DEnk
 	else
 		width = DEnko.m_nPenWidth;
 	int color = (DEnko.m_nPenColor < ArraySize(colTable)) ? colTable[DEnko.m_nPenColor] : DEnko.m_nPenColor;
+    if (color == 256) color = 7;
     int color24 = -1;
-    if (DEnko.m_nPenColor >= 1 && DEnko.m_nPenColor <= 9 && m_jwdoc) {
-        int c = m_jwdoc->Header.m_Pen[DEnko.m_nPenColor].m_m_aPenColor;
-        color24 = ((c & 0xFF) << 16) | (c & 0xFF00) | ((c >> 16) & 0xFF);
+    if (m_jwdoc) {
+        int c = -1;
+        if (DEnko.m_nPenColor >= 1 && DEnko.m_nPenColor <= 9) {
+            c = m_jwdoc->Header.m_Pen[DEnko.m_nPenColor].m_m_aPenColor;
+        } else if (DEnko.m_nPenColor >= 10 && DEnko.m_nPenColor <= 256) {
+            c = m_jwdoc->Header.m_SxfCol.m_aPenColor[DEnko.m_nPenColor];
+        }
+        if (c != -1) {
+            color24 = ((c & 0xFF) << 16) | (c & 0xFF00) | ((c >> 16) & 0xFF);
+            if (color24 == 0x000000 || color24 == 0xFFFFFF) {
+                color24 = -1;
+                color = 7;
+            }
+        }
     }
 	attrib = DL_Attributes(lName,	  // layer
 			       color,	      // color
@@ -421,10 +445,22 @@ void DL_Jww::CreateTen(DL_CreationInterface* creationInterface, CDataTen& DTen)
 	else
 		width = DTen.m_nPenWidth;
 	int color = (DTen.m_nPenColor < ArraySize(colTable)) ? colTable[DTen.m_nPenColor] : DTen.m_nPenColor;
+    if (color == 256) color = 7;
     int color24 = -1;
-    if (DTen.m_nPenColor >= 1 && DTen.m_nPenColor <= 9 && m_jwdoc) {
-        int c = m_jwdoc->Header.m_Pen[DTen.m_nPenColor].m_m_aPenColor;
-        color24 = ((c & 0xFF) << 16) | (c & 0xFF00) | ((c >> 16) & 0xFF);
+    if (m_jwdoc) {
+        int c = -1;
+        if (DTen.m_nPenColor >= 1 && DTen.m_nPenColor <= 9) {
+            c = m_jwdoc->Header.m_Pen[DTen.m_nPenColor].m_m_aPenColor;
+        } else if (DTen.m_nPenColor >= 10 && DTen.m_nPenColor <= 256) {
+            c = m_jwdoc->Header.m_SxfCol.m_aPenColor[DTen.m_nPenColor];
+        }
+        if (c != -1) {
+            color24 = ((c & 0xFF) << 16) | (c & 0xFF00) | ((c >> 16) & 0xFF);
+            if (color24 == 0x000000 || color24 == 0xFFFFFF) {
+                color24 = -1;
+                color = 7;
+            }
+        }
     }
 	attrib = DL_Attributes(lName,	  // layer
 			       color,	      // color
@@ -477,10 +513,28 @@ void DL_Jww::CreateMoji(DL_CreationInterface* creationInterface, CDataMoji& DMoj
 	else
 		width = DMoji.m_nPenWidth;
 	int color = (DMoji.m_nPenColor < ArraySize(colTable)) ? colTable[DMoji.m_nPenColor] : DMoji.m_nPenColor;
+    if (color == 256) color = 7;
+    int color24 = -1;
+    if (m_jwdoc) {
+        int c = -1;
+        if (DMoji.m_nPenColor >= 1 && DMoji.m_nPenColor <= 9) {
+            c = m_jwdoc->Header.m_Pen[DMoji.m_nPenColor].m_m_aPenColor;
+        } else if (DMoji.m_nPenColor >= 10 && DMoji.m_nPenColor <= 256) {
+            c = m_jwdoc->Header.m_SxfCol.m_aPenColor[DMoji.m_nPenColor];
+        }
+        if (c != -1) {
+            color24 = ((c & 0xFF) << 16) | (c & 0xFF00) | ((c >> 16) & 0xFF);
+            if (color24 == 0x000000 || color24 == 0xFFFFFF) {
+                color24 = -1;
+                color = 7;
+            }
+        }
+    }
 	DL_Attributes attrib(lName,	  // layer
 			       color,	      // color
 			       width,	      // width
-			       lTable[DMoji.m_nPenStyle > ArraySize(lTable)-1 ? ArraySize(lTable)-1 : DMoji.m_nPenStyle]);
+			       lTable[DMoji.m_nPenStyle > ArraySize(lTable)-1 ? ArraySize(lTable)-1 : DMoji.m_nPenStyle],
+                   color24);
 	creationInterface->setAttributes(attrib);
 	creationInterface->addLayer(DL_LayerData(lName,0));
 
@@ -509,7 +563,7 @@ void DL_Jww::CreateMoji(DL_CreationInterface* creationInterface, CDataMoji& DMoj
 		// text
 		DMoji.m_string,
 		// style
-		"kochigothic",
+		"unicode",
 		// angle
 		DMoji.m_degKakudo / 180.0 * M_PI);
 
@@ -615,7 +669,23 @@ void DL_Jww::CreateSunpou(DL_CreationInterface* creationInterface, CDataSunpou& 
 	else
 		width = DSunpou.m_nPenWidth;
 	int color = (DSunpou.m_nPenColor < ArraySize(colTable)) ? colTable[DSunpou.m_nPenColor] : DSunpou.m_nPenColor;
+    if (color == 256) color = 7;
     int color24 = -1;
+    if (m_jwdoc) {
+        int c = -1;
+        if (DSunpou.m_nPenColor >= 1 && DSunpou.m_nPenColor <= 9) {
+            c = m_jwdoc->Header.m_Pen[DSunpou.m_nPenColor].m_m_aPenColor;
+        } else if (DSunpou.m_nPenColor >= 10 && DSunpou.m_nPenColor <= 256) {
+            c = m_jwdoc->Header.m_SxfCol.m_aPenColor[DSunpou.m_nPenColor];
+        }
+        if (c != -1) {
+            color24 = ((c & 0xFF) << 16) | (c & 0xFF00) | ((c >> 16) & 0xFF);
+            if (color24 == 0x000000 || color24 == 0xFFFFFF) {
+                color24 = -1;
+                color = 7;
+            }
+        }
+    }
 	attrib = DL_Attributes(lName,	  // layer
 			       color,	      // color
 			       width,	      // width
@@ -627,18 +697,22 @@ void DL_Jww::CreateSunpou(DL_CreationInterface* creationInterface, CDataSunpou& 
 	creationInterface->setExtrusion(0.0, 0.0, 1.0, 0.0 );
 
 	CreateSen(creationInterface, DSunpou.m_Sen);	//線分メンバ
+	
 	CreateMoji(creationInterface, DSunpou.m_Moji);	//文字メンバ
-#ifdef FINISHED
-//	if(DSunpou.nOldVersionSave >=420){
-////	jwWORD m_bSxfMode;	//SXFのモード
-//		CreateSen(graphic, DSunpou.m_SenHo1);	//補助線1
-//		CreateSen(graphic, DSunpou.m_SenHo2);	//補助線2
-//		CreateTen(graphic, DSunpou.m_Ten1);	//矢印（点)1
-//		CreateTen(graphic, DSunpou.m_Ten2);	//矢印（点)2
-//		CreateTen(graphic, DSunpou.m_TenHo1);	//基準点1
-//		CreateTen(graphic, DSunpou.m_TenHo2);	//基準点2
-//	}
-#endif
+
+	if(m_jwdoc && m_jwdoc->Header.JW_DATA_VERSION >= 420){
+		CreateSen(creationInterface, DSunpou.m_SenHo1);	//補助線1
+		
+		CreateSen(creationInterface, DSunpou.m_SenHo2);	//補助線2
+		
+		CreateTen(creationInterface, DSunpou.m_Ten1);	//矢印（点)1
+		
+		CreateTen(creationInterface, DSunpou.m_Ten2);	//矢印（点)2
+		
+		CreateTen(creationInterface, DSunpou.m_TenHo1);	//基準点1
+		
+		CreateTen(creationInterface, DSunpou.m_TenHo2);	//基準点2
+	}
 }
 
 void DL_Jww::CreateBlock(DL_CreationInterface* /*creationInterface*/, CDataBlock& /*DBlock*/)
