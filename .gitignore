@@ -19,6 +19,7 @@ release/
 debug/
 html/
 __pycache__/
+libredwg-0.14.8492-win64/
 
 # Object and archive/library files
 *.o
