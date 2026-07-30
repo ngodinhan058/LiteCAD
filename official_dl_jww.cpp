@@ -44,7 +44,7 @@
 static	int	colTable[] = {
 	250,	//RS_Color(0x00, 0x00, 0x00)
 	4,		//RS_Color(0x00, 0xC0, 0xC0)
-	7,	    //RS_Color(Adaptive Black/White)
+	256,	//RS_Color(0x00, 0x00, 0x00)
 	3,		//RS_Color(0x00, 0xC0, 0x00)
 	2,		//RS_Color(0xC0, 0xC0, 0x00)
 	6,		//RS_Color(0xC0, 0x00, 0xC0)
@@ -107,19 +107,10 @@ DL_Jww::DL_Jww() {
 DL_Jww::~DL_Jww() {
 }
 
-string DL_Jww::getLayerName(int gLayer, int layer) {
-    if (m_jwdoc && gLayer >= 0 && gLayer < 16 && layer >= 0 && layer < 16) {
-        string name = m_jwdoc->Header.m_aStrLayName[gLayer][layer];
-        if (!name.empty()) {
-            return name;
-        }
-    }
-    return HEX[gLayer > 15 ? 15 : gLayer] + "-" + HEX[layer > 15 ? 15 : layer];
-}
-
 void DL_Jww::CreateSen(DL_CreationInterface* creationInterface, CDataSen& DSen)
 {
-	string lName = getLayerName(DSen.m_nGLayer, DSen.m_nLayer);
+	string lName = HEX[DSen.m_nGLayer > ArraySize(HEX)-1 ? ArraySize(HEX)-1: DSen.m_nGLayer] + "-" +
+													HEX[DSen.m_nLayer > ArraySize(HEX)-1 ? ArraySize(HEX)-1: DSen.m_nLayer];
 	// add layer
 	creationInterface->addLayer(DL_LayerData(lName,0));
 //#ifdef	DEBUG
@@ -135,31 +126,12 @@ void DL_Jww::CreateSen(DL_CreationInterface* creationInterface, CDataSen& DSen)
 		width = 0;
 	else
 		width = DSen.m_nPenWidth;
-	int color = (DSen.m_nPenColor < ArraySize(colTable)) ? colTable[DSen.m_nPenColor] : DSen.m_nPenColor;
-    if (color == 256) color = 7;
-    int color24 = -1;
-    if (m_jwdoc) {
-        int c = -1;
-        if (DSen.m_nPenColor >= 1 && DSen.m_nPenColor <= 9) {
-            c = m_jwdoc->Header.m_Pen[DSen.m_nPenColor].m_m_aPenColor;
-        } else if (DSen.m_nPenColor >= 10 && DSen.m_nPenColor <= 256) {
-            c = m_jwdoc->Header.m_SxfCol.m_aPenColor[DSen.m_nPenColor];
-        }
-        if (c != -1) {
-            color24 = ((c & 0xFF) << 16) | (c & 0xFF00) | ((c >> 16) & 0xFF);
-            if (color24 == 0x000000 || color24 == 0xFFFFFF) {
-                color24 = -1;
-                color = 7;
-            }
-        }
-    }
-	attrib = DL_Attributes(lName,	  // layer
+	int color = colTable[DSen.m_nPenColor > ArraySize(colTable)-1 ? ArraySize(colTable)-1 : DSen.m_nPenColor];
+	attrib = DL_Attributes(values[8],	  // layer
 			       color,	      // color
 			       width,	      // width
-			       lTable[DSen.m_nPenStyle > ArraySize(lTable)-1 ? ArraySize(lTable)-1 : DSen.m_nPenStyle],
-                   color24);	  // linetype
+			       lTable[DSen.m_nPenStyle > ArraySize(lTable)-1 ? ArraySize(lTable)-1 : DSen.m_nPenStyle]);	  // linetype
 	creationInterface->setAttributes(attrib);
-    creationInterface->addLayer(DL_LayerData(lName,0));
 
 	creationInterface->setExtrusion(0.0, 0.0, 1.0, 0.0 );
 	// correct some impossible attributes for layers:
@@ -227,38 +199,23 @@ std::cout << "線色幅 " << (jwWORD)DSen.m_nPenWidth << std::endl;//線色幅
 
 void DL_Jww::CreateEnko(DL_CreationInterface* creationInterface, CDataEnko& DEnko)
 {
-	string lName = getLayerName(DEnko.m_nGLayer, DEnko.m_nLayer);
+	string lName = HEX[DEnko.m_nGLayer > ArraySize(HEX)-1 ? ArraySize(HEX)-1: DEnko.m_nGLayer] + "-" +
+													HEX[DEnko.m_nLayer > ArraySize(HEX)-1 ? ArraySize(HEX)-1: DEnko.m_nLayer];
+
+	// add layer
+	creationInterface->addLayer(DL_LayerData(lName,0));
 
 	int width;
 	if(DEnko.m_nPenWidth > 26)
 		width = 0;
 	else
 		width = DEnko.m_nPenWidth;
-	int color = (DEnko.m_nPenColor < ArraySize(colTable)) ? colTable[DEnko.m_nPenColor] : DEnko.m_nPenColor;
-    if (color == 256) color = 7;
-    int color24 = -1;
-    if (m_jwdoc) {
-        int c = -1;
-        if (DEnko.m_nPenColor >= 1 && DEnko.m_nPenColor <= 9) {
-            c = m_jwdoc->Header.m_Pen[DEnko.m_nPenColor].m_m_aPenColor;
-        } else if (DEnko.m_nPenColor >= 10 && DEnko.m_nPenColor <= 256) {
-            c = m_jwdoc->Header.m_SxfCol.m_aPenColor[DEnko.m_nPenColor];
-        }
-        if (c != -1) {
-            color24 = ((c & 0xFF) << 16) | (c & 0xFF00) | ((c >> 16) & 0xFF);
-            if (color24 == 0x000000 || color24 == 0xFFFFFF) {
-                color24 = -1;
-                color = 7;
-            }
-        }
-    }
-	attrib = DL_Attributes(lName,	  // layer
+	int color = colTable[DEnko.m_nPenColor > ArraySize(colTable)-1 ? ArraySize(colTable)-1 : DEnko.m_nPenColor];
+	attrib = DL_Attributes(values[8],	  // layer
 			       color,	      // color
 			       width,	      // width
-			       lTable[DEnko.m_nPenStyle > ArraySize(lTable)-1 ? ArraySize(lTable)-1 : DEnko.m_nPenStyle],
-                   color24);	  // linetype
+			       lTable[DEnko.m_nPenStyle > ArraySize(lTable)-1 ? ArraySize(lTable)-1 : DEnko.m_nPenStyle]);	  // linetype
 	creationInterface->setAttributes(attrib);
-	creationInterface->addLayer(DL_LayerData(lName,0));
 
 	creationInterface->setExtrusion(0.0, 0.0, 1.0, 0.0 );
 
@@ -437,38 +394,22 @@ std::cout << lName.ascii() << std::endl;
 
 void DL_Jww::CreateTen(DL_CreationInterface* creationInterface, CDataTen& DTen)
 {
-	string lName = getLayerName(DTen.m_nGLayer, DTen.m_nLayer);
+	string lName = HEX[DTen.m_nGLayer > ArraySize(HEX)-1 ? ArraySize(HEX)-1: DTen.m_nGLayer] + "-" +
+													HEX[DTen.m_nLayer > ArraySize(HEX)-1 ? ArraySize(HEX)-1: DTen.m_nLayer];
 
+	// add layer
+	creationInterface->addLayer(DL_LayerData(lName,0));
 	int width;
 	if(DTen.m_nPenWidth > 26)
 		width = 0;
 	else
 		width = DTen.m_nPenWidth;
-	int color = (DTen.m_nPenColor < ArraySize(colTable)) ? colTable[DTen.m_nPenColor] : DTen.m_nPenColor;
-    if (color == 256) color = 7;
-    int color24 = -1;
-    if (m_jwdoc) {
-        int c = -1;
-        if (DTen.m_nPenColor >= 1 && DTen.m_nPenColor <= 9) {
-            c = m_jwdoc->Header.m_Pen[DTen.m_nPenColor].m_m_aPenColor;
-        } else if (DTen.m_nPenColor >= 10 && DTen.m_nPenColor <= 256) {
-            c = m_jwdoc->Header.m_SxfCol.m_aPenColor[DTen.m_nPenColor];
-        }
-        if (c != -1) {
-            color24 = ((c & 0xFF) << 16) | (c & 0xFF00) | ((c >> 16) & 0xFF);
-            if (color24 == 0x000000 || color24 == 0xFFFFFF) {
-                color24 = -1;
-                color = 7;
-            }
-        }
-    }
-	attrib = DL_Attributes(lName,	  // layer
+	int color = colTable[DTen.m_nPenColor > ArraySize(colTable)-1 ? ArraySize(colTable)-1 : DTen.m_nPenColor];
+	attrib = DL_Attributes(values[8],	  // layer
 			       color,	      // color
 			       width,	      // width
-			       lTable[DTen.m_nPenStyle > ArraySize(lTable)-1 ? ArraySize(lTable)-1 : DTen.m_nPenStyle],
-                   color24);	  // linetype
+			       lTable[DTen.m_nPenStyle > ArraySize(lTable)-1 ? ArraySize(lTable)-1 : DTen.m_nPenStyle]);	  // linetype
 	creationInterface->setAttributes(attrib);
-	creationInterface->addLayer(DL_LayerData(lName,0));
 
 	creationInterface->setExtrusion(0.0, 0.0, 1.0, 0.0 );
 
@@ -505,45 +446,25 @@ std::cout << *point;
 
 void DL_Jww::CreateMoji(DL_CreationInterface* creationInterface, CDataMoji& DMoji)
 {
-	string lName = getLayerName(DMoji.m_nGLayer, DMoji.m_nLayer);
+	string lName = HEX[DMoji.m_nGLayer > ArraySize(HEX)-1 ? ArraySize(HEX)-1: DMoji.m_nGLayer] + "-" +
+													HEX[DMoji.m_nLayer > ArraySize(HEX)-1 ? ArraySize(HEX)-1: DMoji.m_nLayer];
+
+	// add layer
+	creationInterface->addLayer(DL_LayerData(lName,0));
 
 	int width;
 	if(DMoji.m_nPenWidth > 26)
 		width = 0;
 	else
 		width = DMoji.m_nPenWidth;
-	int color = (DMoji.m_nPenColor < ArraySize(colTable)) ? colTable[DMoji.m_nPenColor] : DMoji.m_nPenColor;
-    if (color == 256) color = 7;
-    int color24 = -1;
-    if (m_jwdoc) {
-        int c = -1;
-        if (DMoji.m_nPenColor >= 1 && DMoji.m_nPenColor <= 9) {
-            c = m_jwdoc->Header.m_Pen[DMoji.m_nPenColor].m_m_aPenColor;
-        } else if (DMoji.m_nPenColor >= 10 && DMoji.m_nPenColor <= 256) {
-            c = m_jwdoc->Header.m_SxfCol.m_aPenColor[DMoji.m_nPenColor];
-        }
-        if (c != -1) {
-            color24 = ((c & 0xFF) << 16) | (c & 0xFF00) | ((c >> 16) & 0xFF);
-            if (color24 == 0x000000 || color24 == 0xFFFFFF) {
-                color24 = -1;
-                color = 7;
-            }
-        }
-    }
-	DL_Attributes attrib(lName,	  // layer
+	int color = colTable[DMoji.m_nPenColor > ArraySize(colTable)-1 ? ArraySize(colTable)-1 : DMoji.m_nPenColor];
+	attrib = DL_Attributes(values[8],	  // layer
 			       color,	      // color
 			       width,	      // width
-			       lTable[DMoji.m_nPenStyle > ArraySize(lTable)-1 ? ArraySize(lTable)-1 : DMoji.m_nPenStyle],
-                   color24);
+			       lTable[DMoji.m_nPenStyle > ArraySize(lTable)-1 ? ArraySize(lTable)-1 : DMoji.m_nPenStyle]);	  // linetype
 	creationInterface->setAttributes(attrib);
-	creationInterface->addLayer(DL_LayerData(lName,0));
 
-    FILE* fdbg = fopen("debug_jww.txt", "a");
-    if(fdbg) {
-        fprintf(fdbg, "CreateMoji: string='%s', dSizeY=%f, nMojiShu=%d, layer='%s', x=%f, y=%f\n", 
-                DMoji.m_string.c_str(), DMoji.m_dSizeY, DMoji.m_nMojiShu, lName.c_str(), DMoji.m_start.x, DMoji.m_start.y);
-        fclose(fdbg);
-    }
+	creationInterface->setExtrusion(0.0, 0.0, 1.0, 0.0 );
 
 	DL_TextData d(
 		// insertion point
@@ -553,7 +474,7 @@ void DL_Jww::CreateMoji(DL_CreationInterface* creationInterface, CDataMoji& DMoj
 		// height
 		DMoji.m_dSizeY,
 		// x scale
-		DMoji.m_dSizeY > 0.0001 ? DMoji.m_dSizeX / DMoji.m_dSizeY : 1.0,
+		1.0,
 		// generation flags
 		0,
 		// h just
@@ -563,7 +484,7 @@ void DL_Jww::CreateMoji(DL_CreationInterface* creationInterface, CDataMoji& DMoj
 		// text
 		DMoji.m_string,
 		// style
-		"unicode",
+		string("japanese"),
 		// angle
 		DMoji.m_degKakudo / 180.0 * M_PI);
 
@@ -661,58 +582,38 @@ void DL_Jww::CreateSolid(DL_CreationInterface* /*creationInterface*/, CDataSolid
 
 void DL_Jww::CreateSunpou(DL_CreationInterface* creationInterface, CDataSunpou& DSunpou)
 {
-	string lName = getLayerName(DSunpou.m_nGLayer, DSunpou.m_nLayer);
+	string lName = HEX[DSunpou.m_nGLayer > ArraySize(HEX)-1 ? ArraySize(HEX)-1: DSunpou.m_nGLayer] + "-" +
+													HEX[DSunpou.m_nLayer > ArraySize(HEX)-1 ? ArraySize(HEX)-1: DSunpou.m_nLayer];
 
+	// add layer
+	creationInterface->addLayer(DL_LayerData(lName,0));
 	int width;
 	if(DSunpou.m_nPenWidth > 26)
 		width = 0;
 	else
 		width = DSunpou.m_nPenWidth;
-	int color = (DSunpou.m_nPenColor < ArraySize(colTable)) ? colTable[DSunpou.m_nPenColor] : DSunpou.m_nPenColor;
-    if (color == 256) color = 7;
-    int color24 = -1;
-    if (m_jwdoc) {
-        int c = -1;
-        if (DSunpou.m_nPenColor >= 1 && DSunpou.m_nPenColor <= 9) {
-            c = m_jwdoc->Header.m_Pen[DSunpou.m_nPenColor].m_m_aPenColor;
-        } else if (DSunpou.m_nPenColor >= 10 && DSunpou.m_nPenColor <= 256) {
-            c = m_jwdoc->Header.m_SxfCol.m_aPenColor[DSunpou.m_nPenColor];
-        }
-        if (c != -1) {
-            color24 = ((c & 0xFF) << 16) | (c & 0xFF00) | ((c >> 16) & 0xFF);
-            if (color24 == 0x000000 || color24 == 0xFFFFFF) {
-                color24 = -1;
-                color = 7;
-            }
-        }
-    }
-	attrib = DL_Attributes(lName,	  // layer
+	int color = colTable[DSunpou.m_nPenColor > ArraySize(colTable)-1 ? ArraySize(colTable)-1 : DSunpou.m_nPenColor];
+	attrib = DL_Attributes(values[8],	  // layer
 			       color,	      // color
 			       width,	      // width
-			       lTable[DSunpou.m_nPenStyle > ArraySize(lTable)-1 ? ArraySize(lTable)-1 : DSunpou.m_nPenStyle],
-                   color24);	  // linetype
+			       lTable[DSunpou.m_nPenStyle > ArraySize(lTable)-1 ? ArraySize(lTable)-1 : DSunpou.m_nPenStyle]);	  // linetype
 	creationInterface->setAttributes(attrib);
-	creationInterface->addLayer(DL_LayerData(lName,0));
 
 	creationInterface->setExtrusion(0.0, 0.0, 1.0, 0.0 );
 
 	CreateSen(creationInterface, DSunpou.m_Sen);	//線分メンバ
-	
 	CreateMoji(creationInterface, DSunpou.m_Moji);	//文字メンバ
-
-	if(m_jwdoc && m_jwdoc->Header.JW_DATA_VERSION >= 420){
-		CreateSen(creationInterface, DSunpou.m_SenHo1);	//補助線1
-		
-		CreateSen(creationInterface, DSunpou.m_SenHo2);	//補助線2
-		
-		CreateTen(creationInterface, DSunpou.m_Ten1);	//矢印（点)1
-		
-		CreateTen(creationInterface, DSunpou.m_Ten2);	//矢印（点)2
-		
-		CreateTen(creationInterface, DSunpou.m_TenHo1);	//基準点1
-		
-		CreateTen(creationInterface, DSunpou.m_TenHo2);	//基準点2
-	}
+#ifdef FINISHED
+//	if(DSunpou.nOldVersionSave >=420){
+////	jwWORD m_bSxfMode;	//SXFのモード
+//		CreateSen(graphic, DSunpou.m_SenHo1);	//補助線1
+//		CreateSen(graphic, DSunpou.m_SenHo2);	//補助線2
+//		CreateTen(graphic, DSunpou.m_Ten1);	//矢印（点)1
+//		CreateTen(graphic, DSunpou.m_Ten2);	//矢印（点)2
+//		CreateTen(graphic, DSunpou.m_TenHo1);	//基準点1
+//		CreateTen(graphic, DSunpou.m_TenHo2);	//基準点2
+//	}
+#endif
 }
 
 void DL_Jww::CreateBlock(DL_CreationInterface* /*creationInterface*/, CDataBlock& /*DBlock*/)
@@ -772,10 +673,9 @@ bool DL_Jww::in(const string& file, DL_CreationInterface* creationInterface) {
 	JWWDocument* jwdoc = new JWWDocument((std::string&)file, ofile);
 	if(!jwdoc->Read())
 		return false;
-    this->m_jwdoc = jwdoc;
 	//DXF変数設定
-	creationInterface->setVariableString("$DWGCODEPAGE", "Shift-JIS", 7);
-	creationInterface->setVariableString("$TEXTSTYLE", "Unicode", 7);
+	creationInterface->setVariableString("$DWGCODEPAGE", "SJIS", 7);
+	creationInterface->setVariableString("$TEXTSTYLE", "japanese", 7);
 	//線分データ
 	for( unsigned int i = 0; i < jwdoc->vSen.size(); i++ )
 		CreateSen(creationInterface, jwdoc->vSen[i]);

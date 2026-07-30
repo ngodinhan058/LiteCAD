@@ -37,8 +37,28 @@
 #include "rs_dimdiametric.h"
 #include "rs_dimlinear.h"
 #include "rs_dimradial.h"
+#include "rs_dialogfactory.h"
+#include "rs_system.h"
 #include "rs_ellipse.h"
 #include "rs_hatch.h"
+
+#include <QRunnable>
+#include <QThreadPool>
+
+namespace {
+    class HatchValidatorTask : public QRunnable {
+    public:
+        RS_Hatch* hatch;
+        HatchValidatorTask(RS_Hatch* h) : hatch(h) {}
+        void run() override {
+            if (hatch->validate()) {
+                // validation succeeded
+            } else {
+                hatch->setFlag(RS2::FlagTemp); // mark as invalid
+            }
+        }
+    };
+}
 #include "rs_image.h"
 #include "rs_insert.h"
 #include "rs_layer.h"
@@ -58,9 +78,26 @@
 #include "dxf_format.h"
 #include "lc_defaults.h"
 
+#include <QCoreApplication>
+#include <QProcess>
+#include <QStandardPaths>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QDebug>
+#include <QProgressDialog>
+#include <QApplication>
+#include <QMessageBox>
+#include <QThreadPool>
+#include <QRunnable>
+
 #ifdef DWGSUPPORT
 #include "libdwgr.h"
 #include "rs_debug.h"
+#endif
+
+#ifdef Q_OS_WIN
+#include <windows.h>
 #endif
 
 /**
@@ -136,6 +173,34 @@ QString RS_FilterDXFRW::lastError() const
 
 
 
+namespace {
+    QString getODAConverterPath() {
+        QStringList searchPaths;
+#ifdef Q_OS_WIN
+        searchPaths << "C:/Program Files/ODA" 
+                    << "C:/Program Files (x86)/ODA" 
+                    << "C:/Program Files/Open Design Alliance" 
+                    << "C:/Program Files (x86)/Open Design Alliance";
+        
+        for (const QString& basePath : searchPaths) {
+            QDir dir(basePath);
+            if (dir.exists()) {
+                QStringList subDirs = dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name | QDir::Reversed);
+                for (const QString& subDir : subDirs) {
+                    if (subDir.startsWith("ODAFileConverter", Qt::CaseInsensitive)) {
+                        QString exePath = basePath + "/" + subDir + "/ODAFileConverter.exe";
+                        if (QFile::exists(exePath)) {
+                            return exePath;
+                        }
+                    }
+                }
+            }
+        }
+#endif
+        return QString();
+    }
+}
+
 /**
  * Implementation of the method used for RS_Import to communicate
  * with this filter.
@@ -146,15 +211,233 @@ QString RS_FilterDXFRW::lastError() const
  */
 bool RS_FilterDXFRW::fileImport(RS_Graphic& g, const QString& file, RS2::FormatType type) {
     RS_DEBUG->print("RS_FilterDXFRW::fileImport");
+    g.setAutoUpdateBorders(false);
 
     RS_DEBUG->print("DXFRW Filter: importing file '%s'...", (const char*)QFile::encodeName(file));
-#ifndef DWGSUPPORT
-    Q_UNUSED(type)
-#endif
+
+    if (file.endsWith(".dwg", Qt::CaseInsensitive) || type == RS2::FormatDWG) {
+        QString execPath = getODAConverterPath();
+        bool useODA = !execPath.isEmpty();
+        
+    start_conversion:
+        if (!useODA) {
+            execPath = QCoreApplication::applicationDirPath() + "/dwg2dxf.exe";
+            if (!QFile::exists(execPath)) {
+                execPath = QCoreApplication::applicationDirPath() + "/dwg2dxf";
+                if (!QFile::exists(execPath)) {
+                    execPath = QStandardPaths::findExecutable("dwg2dxf");
+                    if (execPath.isEmpty()) {
+                        execPath = QStandardPaths::findExecutable("dwg2dxf.exe");
+                    }
+                }
+            }
+        }
+
+        if (execPath.isEmpty() || !QFile::exists(execPath)) {
+            RS_DIALOGFACTORY->commandMessage(QObject::tr("Converter dwg2dxf.exe or ODAFileConverter not found in application directory: %1").arg(QCoreApplication::applicationDirPath()));
+            g.setAutoUpdateBorders(true);
+            return false;
+        }
+
+        QString tempDxf;
+        if (useODA) {
+            tempDxf = QDir::tempPath() + "/" + QFileInfo(file).completeBaseName() + ".dxf";
+        } else {
+            tempDxf = QDir::tempPath() + "/librecad_temp_conversion.dxf";
+        }
+        
+        if (QFile::exists(tempDxf)) {
+            QFile::remove(tempDxf);
+        }
+
+        QProcess proc;
+        proc.setWorkingDirectory(QDir::tempPath());
+
+        QStringList args;
+        if (useODA) {
+            args << QDir::toNativeSeparators(QFileInfo(file).absolutePath())
+                 << QDir::toNativeSeparators(QDir::tempPath())
+                 << "ACAD2004" << "DXF" << "0" << "0"
+                 << QFileInfo(file).fileName();
+        } else {
+            args << "-y" << "-v2000" << "-o" << tempDxf << file;
+        }
+
+        QString progressMsg = useODA ? QObject::tr("Converting DWG to DXF using ODA File Converter...")
+                                     : QObject::tr("Converting DWG to DXF using dwg2dxf...");
+        QProgressDialog progress(progressMsg, QObject::tr("Cancel"), 0, 0, nullptr);
+        progress.setWindowModality(Qt::WindowModal);
+        progress.setMinimumDuration(100);
+        progress.setValue(0);
+        QCoreApplication::processEvents();
+
+        QApplication::setOverrideCursor(Qt::WaitCursor);
+
+        #ifdef Q_OS_WIN
+        proc.setCreateProcessArgumentsModifier([](QProcess::CreateProcessArguments *args) {
+            args->flags |= CREATE_NO_WINDOW;
+        });
+        #endif
+
+        proc.start(execPath, args);
+        proc.closeWriteChannel();
+
+        QByteArray stdOutData;
+        QByteArray stdErrData;
+        const int maxBufSize = 65536;
+
+        while (!proc.waitForFinished(50)) {
+            QByteArray outChunk = proc.readAllStandardOutput();
+            if (!outChunk.isEmpty()) {
+                stdOutData.append(outChunk);
+                if (stdOutData.size() > maxBufSize) {
+                    stdOutData = stdOutData.right(maxBufSize);
+                }
+            }
+            QByteArray errChunk = proc.readAllStandardError();
+            if (!errChunk.isEmpty()) {
+                stdErrData.append(errChunk);
+                if (stdErrData.size() > maxBufSize) {
+                    stdErrData = stdErrData.right(maxBufSize);
+                }
+            }
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+            if (progress.wasCanceled()) {
+                proc.kill();
+                proc.waitForFinished(500);
+                while (QApplication::overrideCursor()) {
+                    QApplication::restoreOverrideCursor();
+                }
+                if (QFile::exists(tempDxf)) {
+                    QFile::remove(tempDxf);
+                }
+                g.setAutoUpdateBorders(true);
+                return false;
+            }
+        }
+        stdOutData.append(proc.readAllStandardOutput());
+        stdErrData.append(proc.readAllStandardError());
+
+        if (!QFile::exists(tempDxf) || QFileInfo(tempDxf).size() == 0) {
+            while (QApplication::overrideCursor()) {
+                QApplication::restoreOverrideCursor();
+            }
+            progress.close();
+            QString stdOut = QString::fromLocal8Bit(stdOutData);
+            QString stdErr = QString::fromLocal8Bit(stdErrData);
+            QString converterName = useODA ? "ODAFileConverter" : "dwg2dxf";
+            RS_DEBUG->print(RS_Debug::D_WARNING, "%s failed to produce %s. Exit code: %d. Error output: %s", 
+                            converterName.toLatin1().data(), tempDxf.toLatin1().data(), proc.exitCode(), stdErr.toLatin1().data());
+            
+            if (useODA) {
+                QMessageBox::StandardButton reply = QMessageBox::question(nullptr, QObject::tr("Conversion Failed"), 
+                    QObject::tr("ODA File Converter failed to convert the file.\nDo you want to try using dwg2dxf instead?"),
+                    QMessageBox::Yes | QMessageBox::No);
+                if (reply == QMessageBox::Yes) {
+                    useODA = false;
+                    goto start_conversion;
+                }
+            } else {
+                RS_DIALOGFACTORY->commandMessage(QObject::tr("%1 failed to convert file.\nError: %2").arg(converterName).arg(stdErr.isEmpty() ? stdOut : stdErr));
+            }
+            return false;
+        }
+
+        progress.setLabelText(QObject::tr("Loading converted DXF..."));
+        progress.setValue(1);
+        QCoreApplication::processEvents();
+
+        graphic = &g;
+        dummyContainer = new RS_EntityContainer(nullptr, false);
+        currentContainer = dummyContainer;
+
+        this->file = tempDxf;
+        graphic->addVariable("$DIMSTYLE", "Standard", 2);
+        dimStyle = "Standard";
+        codePage = "ANSI_1252";
+        textStyle = "Standard";
+        isLibDxfRw = false;
+        libDxfRwVersion = 0;
+
+        dxfRW dxfR(QFile::encodeName(tempDxf));
+        m_progressDialog = &progress;
+        m_entityCount = 0;
+        m_layerCache.clear();
+        m_linetypeCache.clear();
+        bool convSuccess = dxfR.read(this, true);
+        m_progressDialog = nullptr;
+        if (!convSuccess && (!graphic->isEmpty() || graphic->countBlocks() > 0)) {
+            convSuccess = true;
+        }
+        if (!unvalidatedHatches.isEmpty()) {
+            progress.setLabelText(QObject::tr("Validating Hatches..."));
+            progress.setMaximum(unvalidatedHatches.size());
+            progress.setValue(0);
+            QCoreApplication::processEvents();
+            
+            QThreadPool* pool = QThreadPool::globalInstance();
+            for (RS_Hatch* h : unvalidatedHatches) {
+                pool->start(new HatchValidatorTask(h));
+            }
+            
+            while (!pool->waitForDone(50)) {
+                QCoreApplication::processEvents();
+                if (progress.wasCanceled()) {
+                    pool->clear();
+                    break;
+                }
+            }
+            
+            for (RS_Hatch* h : unvalidatedHatches) {
+                if (h->getFlag(RS2::FlagTemp)) {
+                    graphic->removeEntity(h);
+                    RS_DEBUG->print(RS_Debug::D_ERROR, "RS_FilterDXFRW::fileImport(): updating hatch failed: invalid hatch area");
+                } else {
+                    h->update();
+                }
+            }
+            unvalidatedHatches.clear();
+        }
+
+        if (dummyContainer && dummyContainer->count() > 0) {
+            for (RS_Entity* e : dummyContainer->getEntityList()) {
+                e->reparent(graphic);
+                graphic->appendEntity(e);
+            }
+        }
+        delete dummyContainer;
+        RS_Layer* cl = graphic->findLayer(graphic->getVariableString("$CLAYER", "0"));
+        if (cl) {
+            graphic->getLayerList()->activate(cl, true);
+        }
+        progress.setLabelText(QObject::tr("Updating block inserts..."));
+        QCoreApplication::processEvents();
+        graphic->updateInserts();
+        
+        graphic->setAutoUpdateBorders(true);
+        if (graphic->getBlockList()) {
+            for (RS_Block* b : *graphic->getBlockList()) {
+                if (b) b->setAutoUpdateBorders(true);
+            }
+        }
+        graphic->calculateBorders();
+        m_progressDialog = nullptr;
+
+        while (QApplication::overrideCursor()) {
+            QApplication::restoreOverrideCursor();
+        }
+        progress.close();
+        
+        if (QFile::exists(tempDxf)) {
+            QFile::remove(tempDxf);
+        }
+        
+        return convSuccess;
+    }
 
     graphic = &g;
-    currentContainer = graphic;
-	dummyContainer = new RS_EntityContainer(nullptr, true);
+    dummyContainer = new RS_EntityContainer(nullptr, false);
+    currentContainer = dummyContainer;
 
     this->file = file;
     // add some variables that need to be there for DXF drawings:
@@ -165,46 +448,89 @@ bool RS_FilterDXFRW::fileImport(RS_Graphic& g, const QString& file, RS2::FormatT
     //reset library version
     isLibDxfRw = false;
     libDxfRwVersion = 0;
+    QProgressDialog progress(QObject::tr("Loading DXF file..."), QObject::tr("Cancel"), 0, 0, nullptr);
+    progress.setWindowModality(Qt::WindowModal);
+    progress.setMinimumDuration(100);
+    progress.setValue(0);
+    QCoreApplication::processEvents();
 
-#ifdef DWGSUPPORT
-    if (type == RS2::FormatDWG) {
-        dwgR dwgr(QFile::encodeName(file));
-        RS_DEBUG->print("RS_FilterDXFRW::fileImport: reading DWG file");
-        if (RS_DEBUG->getLevel()== RS_Debug::D_DEBUGGING)
-            dwgr.setDebug(DRW::DebugLevel::Debug);
-        bool success = dwgr.read(this, true);
-        RS_DEBUG->print("RS_FilterDXFRW::fileImport: reading DWG file: OK");
-        RS_DIALOGFACTORY->commandMessage(QObject::tr("Opened dwg file version %1.").arg(printDwgVersion(dwgr.getVersion())));
-        int  lastError = dwgr.getError();
-        if (false == success) {
-            printDwgError(lastError);
-            RS_DEBUG->print(RS_Debug::D_WARNING,
-                            "Cannot open DWG file '%s'.", (const char*)QFile::encodeName(file));
-            errorCode = dwgr.getError();
-            return false;
-        }
-    } else {
-#endif
-        dxfRW dxfR(QFile::encodeName(file));
+    QApplication::setOverrideCursor(Qt::WaitCursor);
 
-        RS_DEBUG->print("RS_FilterDXFRW::fileImport: reading file");
-        if (RS_Debug::D_DEBUGGING == RS_DEBUG->getLevel()) {
-            dxfR.setDebug(DRW::DebugLevel::Debug);
+    dxfRW dxfR(QFile::encodeName(file));
+
+    RS_DEBUG->print("RS_FilterDXFRW::fileImport: reading file");
+    if (RS_Debug::D_DEBUGGING == RS_DEBUG->getLevel()) {
+        dxfR.setDebug(DRW::DebugLevel::Debug);
+    }
+    
+    m_progressDialog = &progress;
+    m_entityCount = 0;
+    bool success = dxfR.read(this, true);
+    m_progressDialog = nullptr;
+    
+    if (!success && (!graphic->isEmpty() || graphic->countBlocks() > 0)) {
+        success = true;
+    }
+
+    if (!unvalidatedHatches.isEmpty()) {
+        progress.setLabelText(QObject::tr("Validating Hatches..."));
+        progress.setMaximum(unvalidatedHatches.size());
+        progress.setValue(0);
+        QCoreApplication::processEvents();
+        
+        QThreadPool* pool = QThreadPool::globalInstance();
+        for (RS_Hatch* h : unvalidatedHatches) {
+            pool->start(new HatchValidatorTask(h));
         }
-        bool success = dxfR.read(this, true);
+        
+        // Wait for completion and update UI
+        while (!pool->waitForDone(50)) {
+            QCoreApplication::processEvents();
+            if (progress.wasCanceled()) {
+                pool->clear(); // Cancel pending tasks
+                break;
+            }
+        }
+        
+        for (RS_Hatch* h : unvalidatedHatches) {
+            if (h->getFlag(RS2::FlagTemp)) {
+                graphic->removeEntity(h);
+                RS_DEBUG->print(RS_Debug::D_ERROR, "RS_FilterDXFRW::fileImport(): updating hatch failed: invalid hatch area");
+            } else {
+                h->update();
+            }
+        }
+        unvalidatedHatches.clear();
+    }
+
         RS_DEBUG->print("RS_FilterDXFRW::fileImport: reading file: OK");
         //graphic->setAutoUpdateBorders(true);
 
         if (false == success) {
+            graphic->setAutoUpdateBorders(true);
+            if (graphic->getBlockList()) {
+                for (RS_Block* b : *graphic->getBlockList()) {
+                    if (b) b->setAutoUpdateBorders(true);
+                }
+            }
             RS_DEBUG->print(RS_Debug::D_WARNING,
                             "Cannot open DXF file '%s'.", (const char*)QFile::encodeName(file));
             errorCode = dxfR.getError();
+            
+            while (QApplication::overrideCursor()) {
+                QApplication::restoreOverrideCursor();
+            }
+            progress.close();
+            
             return false;
         }
-#ifdef DWGSUPPORT
-    }
-#endif
 
+    if (dummyContainer && dummyContainer->count() > 0) {
+        for (RS_Entity* e : dummyContainer->getEntityList()) {
+            e->reparent(graphic);
+            graphic->appendEntity(e);
+        }
+    }
     delete dummyContainer;
     /*set current layer */
     RS_Layer* cl = graphic->findLayer(graphic->getVariableString("$CLAYER", "0"));
@@ -214,8 +540,21 @@ bool RS_FilterDXFRW::fileImport(RS_Graphic& g, const QString& file, RS2::FormatT
     }
     RS_DEBUG->print("RS_FilterDXFRW::fileImport: updating inserts");
     graphic->updateInserts();
+    
+    graphic->setAutoUpdateBorders(true);
+    if (graphic->getBlockList()) {
+        for (RS_Block* b : *graphic->getBlockList()) {
+            if (b) b->setAutoUpdateBorders(true);
+        }
+    }
+    graphic->calculateBorders();
 
     RS_DEBUG->print("RS_FilterDXFRW::fileImport OK");
+
+    while (QApplication::overrideCursor()) {
+        QApplication::restoreOverrideCursor();
+    }
+    progress.close();
 
     return true;
 }
@@ -229,7 +568,7 @@ void RS_FilterDXFRW::addLayer(const DRW_Layer &data) {
 
     RS_DEBUG->print("RS_FilterDXF::addLayer: creating layer");
 
-    QString name = QString::fromUtf8(data.name.c_str());
+    QString name = toNativeString(QString::fromUtf8(data.name.c_str()));
     if (name != "0" && graphic->findLayer(name)) {
         return;
     }
@@ -238,9 +577,6 @@ void RS_FilterDXFRW::addLayer(const DRW_Layer &data) {
     layer->setPen(attributesToPen(&data));
 
     RS_DEBUG->print("RS_FilterDXF::addLayer: flags");
-    if (data.flags&0x01) {
-        layer->freeze(true);
-    }
     if (data.flags&0x04) {
         layer->lock(true);
     }
@@ -331,29 +667,32 @@ void RS_FilterDXFRW::addBlock(const DRW_Block& data) {
     RS_DEBUG->print("RS_FilterDXF::addBlock");
 
     RS_DEBUG->print("  adding block: %s", data.name.c_str());
-/*TODO correct handle of model-space*/
 
     QString name = QString::fromUtf8(data.name.c_str());
-    QString mid = name.mid(1,11);
-// Prevent special blocks (paper_space, model_space) from being added:
-    if (mid.toLower() != "paper_space" && mid.toLower() != "model_space") {
+    QString nameLower = name.toLower();
+
+// Prevent special blocks (paper_space, model_space) from being added to block list, but direct their entities:
+    bool isModelSpace = nameLower.contains("model_space") || nameLower.contains("model space") || (nameLower.startsWith("*") && nameLower.contains("model"));
+    bool isPaperSpace = nameLower.contains("paper_space") || nameLower.contains("paper space") || (nameLower.startsWith("*") && nameLower.contains("paper"));
+
+    if (!isPaperSpace && !isModelSpace) {
 
             RS_Vector bp(data.basePoint.x, data.basePoint.y);
             RS_Block* block =
                 new RS_Block(graphic, RS_BlockData(name, bp, false ));
-            //block->setFlags(flags);
+            
+            block->setAutoUpdateBorders(false);
 
             if (graphic->addBlock(block)) {
                 currentContainer = block;
                 blockHash.insert(data.parentHandle, currentContainer);
-            } else
-                blockHash.insert(data.parentHandle, dummyContainer);
+            } else {
+                currentContainer = dummyContainer;
+                blockHash.insert(data.parentHandle, currentContainer);
+            }
     } else {
-        if (mid.toLower() == "model_space") {
-            blockHash.insert(data.parentHandle, graphic);
-        } else {
-            blockHash.insert(data.parentHandle, dummyContainer);
-        }
+        currentContainer = graphic;
+        blockHash.insert(data.parentHandle, graphic);
     }
 }
 
@@ -369,14 +708,6 @@ void RS_FilterDXFRW::setBlock(const int handle){
  * Implementation of the method which closes blocks.
  */
 void RS_FilterDXFRW::endBlock() {
-    if (currentContainer->rtti() == RS2::EntityBlock) {
-        RS_Block *bk = (RS_Block *)currentContainer;
-        //remove unnamed blocks *D only if version != R12
-        if (version!=1009) {
-            if (bk->getName().startsWith("*D") )
-                graphic->removeBlock(bk);
-        }
-    }
     currentContainer = graphic;
 }
 
@@ -393,6 +724,7 @@ void RS_FilterDXFRW::addPoint(const DRW_Point& data) {
     setEntityAttributes(entity, &data);
 
     currentContainer->addEntity(entity);
+    checkProgressEvents();
 }
 
 
@@ -420,6 +752,7 @@ void RS_FilterDXFRW::addLine(const DRW_Line& data) {
 
 	if (currentContainer) currentContainer->addEntity(entity);
 
+    checkProgressEvents();
     RS_DEBUG->print("RS_FilterDXF::addLine: OK");
 }
 
@@ -448,6 +781,7 @@ void RS_FilterDXFRW::addRay(const DRW_Ray& data) {
 
 	if (currentContainer) currentContainer->addEntity(entity);
 
+    checkProgressEvents();
     RS_DEBUG->print("RS_FilterDXF::addRay: OK");
 }
 
@@ -475,6 +809,7 @@ void RS_FilterDXFRW::addXline(const DRW_Xline& data) {
 
 	if (currentContainer) currentContainer->addEntity(entity);
 
+    checkProgressEvents();
     RS_DEBUG->print("RS_FilterDXF::addXline: OK");
 }
 
@@ -491,6 +826,7 @@ void RS_FilterDXFRW::addCircle(const DRW_Circle& data) {
     setEntityAttributes(entity, &data);
 
     currentContainer->addEntity(entity);
+    checkProgressEvents();
 }
 
 
@@ -512,6 +848,7 @@ void RS_FilterDXFRW::addArc(const DRW_Arc& data) {
     setEntityAttributes(entity, &data);
 
     currentContainer->addEntity(entity);
+    checkProgressEvents();
 }
 
 
@@ -538,6 +875,7 @@ void RS_FilterDXFRW::addEllipse(const DRW_Ellipse& data) {
     setEntityAttributes(entity, &data);
 
     currentContainer->addEntity(entity);
+    checkProgressEvents();
 }
 
 
@@ -557,6 +895,7 @@ void RS_FilterDXFRW::addTrace(const DRW_Trace& data) {
 
     setEntityAttributes(entity, &data);
     currentContainer->addEntity(entity);
+    checkProgressEvents();
 }
 
 /**
@@ -586,6 +925,7 @@ void RS_FilterDXFRW::addLWPolyline(const DRW_LWPolyline& data) {
     polyline->appendVertexs(verList);
 
     currentContainer->addEntity(polyline);
+    checkProgressEvents();
 }
 
 
@@ -616,6 +956,7 @@ void RS_FilterDXFRW::addPolyline(const DRW_Polyline& data) {
     polyline->appendVertexs(verList);
 
     currentContainer->addEntity(polyline);
+    checkProgressEvents();
 }
 
 
@@ -685,6 +1026,7 @@ void RS_FilterDXFRW::addSpline(const DRW_Spline* data) {
         spline->data.closed = 0;
 
     spline->update();
+    checkProgressEvents();
 }
 
 
@@ -710,6 +1052,7 @@ void RS_FilterDXFRW::addInsert(const DRW_Insert& data) {
     RS_DEBUG->print("  id: %lu", entity->getId());
 //    entity->update();
     currentContainer->addEntity(entity);
+    checkProgressEvents();
 }
 
 
@@ -812,6 +1155,7 @@ void RS_FilterDXFRW::addMText(const DRW_MText& data) {
     setEntityAttributes(entity, &data);
     entity->update();
     currentContainer->addEntity(entity);
+    checkProgressEvents();
 }
 
 
@@ -871,6 +1215,7 @@ void RS_FilterDXFRW::addText(const DRW_Text& data) {
     setEntityAttributes(entity, &data);
     entity->update();
     currentContainer->addEntity(entity);
+    checkProgressEvents();
 }
 
 
@@ -960,6 +1305,7 @@ void RS_FilterDXFRW::addDimAlign(const DRW_DimAligned *data) {
     entity->updateDimPoint();
     entity->update();
     currentContainer->addEntity(entity);
+    checkProgressEvents();
 }
 
 
@@ -984,6 +1330,7 @@ void RS_FilterDXFRW::addDimLinear(const DRW_DimLinear *data) {
     setEntityAttributes(entity, data);
     entity->update();
     currentContainer->addEntity(entity);
+    checkProgressEvents();
 }
 
 
@@ -1006,6 +1353,7 @@ void RS_FilterDXFRW::addDimRadial(const DRW_DimRadial* data) {
     setEntityAttributes(entity, data);
     entity->update();
     currentContainer->addEntity(entity);
+    checkProgressEvents();
 }
 
 
@@ -1028,6 +1376,7 @@ void RS_FilterDXFRW::addDimDiametric(const DRW_DimDiametric* data) {
     setEntityAttributes(entity, data);
     entity->update();
     currentContainer->addEntity(entity);
+    checkProgressEvents();
 }
 
 
@@ -1053,6 +1402,7 @@ void RS_FilterDXFRW::addDimAngular(const DRW_DimAngular* data) {
     setEntityAttributes(entity, data);
     entity->update();
     currentContainer->addEntity(entity);
+    checkProgressEvents();
 }
 
 
@@ -1079,6 +1429,7 @@ void RS_FilterDXFRW::addDimAngular3P(const DRW_DimAngular3p* data) {
     setEntityAttributes(entity, data);
     entity->update();
     currentContainer->addEntity(entity);
+    checkProgressEvents();
 }
 
 
@@ -1102,6 +1453,7 @@ void RS_FilterDXFRW::addLeader(const DRW_Leader *data) {
 
     leader->update();
     currentContainer->addEntity(leader);
+    checkProgressEvents();
 
 }
 
@@ -1222,14 +1574,8 @@ void RS_FilterDXFRW::addHatch(const DRW_Hatch *data) {
 
     }
 
-    RS_DEBUG->print("hatch->update()");
-    if (hatch->validate()) {
-        hatch->update();
-    } else {
-        graphic->removeEntity(hatch);
-        RS_DEBUG->print(RS_Debug::D_ERROR,
-                    "RS_FilterDXFRW::endEntity(): updating hatch failed: invalid hatch area");
-    }
+    unvalidatedHatches.append(hatch);
+    checkProgressEvents();
 }
 
 
@@ -1251,6 +1597,7 @@ void RS_FilterDXFRW::addImage(const DRW_Image *data) {
 
     setEntityAttributes(image, data);
     currentContainer->appendEntity(image);
+    checkProgressEvents();
 }
 
 
@@ -1433,6 +1780,45 @@ bool RS_FilterDXFRW::fileExport(RS_Graphic& g, const QString& file, RS2::FormatT
     }
     //
 #endif
+
+    if (type == RS2::FormatDWG || file.endsWith(".dwg", Qt::CaseInsensitive)) {
+        QString tempDxf = QDir::tempPath() + "/librecad_temp_conversion.dxf";
+        dxfW = new dxfRW(QFile::encodeName(tempDxf));
+        bool success = dxfW->write(this, DRW::AC1021, false);
+        delete dxfW;
+        if (!success) {
+            return false;
+        }
+
+        QString execPath = QCoreApplication::applicationDirPath() + "/dxf2dwg.exe";
+        if (!QFile::exists(execPath)) {
+            execPath = QCoreApplication::applicationDirPath() + "/dxf2dwg";
+            if (!QFile::exists(execPath)) {
+                execPath = QStandardPaths::findExecutable("dxf2dwg");
+                if (execPath.isEmpty()) {
+                    execPath = QStandardPaths::findExecutable("dxf2dwg.exe");
+                }
+            }
+        }
+
+        if (QFile::exists(execPath) && !execPath.isEmpty()) {
+            QProcess proc;
+            proc.setWorkingDirectory(QDir::tempPath());
+            proc.setStandardErrorFile(QProcess::nullDevice());
+            QStringList args;
+            args << "-y" << "-v0" << "-o" << file << tempDxf;
+            proc.start(execPath, args);
+            proc.waitForFinished(-1);
+            QFile::remove(tempDxf);
+            return QFile::exists(file);
+        } else {
+            QFile::remove(file);
+            QFile::copy(tempDxf, file);
+            QFile::remove(tempDxf);
+            RS_DIALOGFACTORY->commandMessage(QObject::tr("Saved DWG stream. Install LibreDWG (dxf2dwg) for native binary DWG encoding."));
+            return true;
+        }
+    }
 
     // set version for DXF filter:
     exactColor = false;
@@ -3029,26 +3415,43 @@ void RS_FilterDXFRW::writeImage(RS_Image * i) {
 }*/
 
 
+void RS_FilterDXFRW::checkProgressEvents() {
+    m_entityCount++;
+    if (m_entityCount % 2000 == 0) {
+        if (m_progressDialog) {
+            m_progressDialog->setLabelText(QObject::tr("Loading converted DXF (%1 entities)...").arg(m_entityCount));
+        }
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 5);
+    }
+}
+
 /**
  * Sets the entities attributes according to the attributes
  * that come from a DXF file.
  */
 void RS_FilterDXFRW::setEntityAttributes(RS_Entity* entity,
                                        const DRW_Entity* attrib) {
+    checkProgressEvents();
     RS_DEBUG->print("RS_FilterDXF::setEntityAttributes");
 
     RS_Pen pen;
     pen.setColor(Qt::black);
     pen.setLineType(RS2::SolidLine);
     QString layName = toNativeString(QString::fromUtf8(attrib->layer.c_str()));
-
-    // Layer: add layer in case it doesn't exist:
-	if (!graphic->findLayer(layName)) {
-        DRW_Layer lay;
-        lay.name = attrib->layer;
-        addLayer(lay);
+    
+    RS_Layer* layer = m_layerCache.value(layName, nullptr);
+    if (!layer) {
+        layer = graphic->findLayer(layName);
+        if (!layer) {
+            DRW_Layer lay;
+            lay.name = attrib->layer;
+            addLayer(lay);
+            layer = graphic->findLayer(layName);
+        }
+        m_layerCache.insert(layName, layer);
     }
-    entity->setLayer(layName);
+
+    entity->setLayer(layer);
 
     // Color:
     if (attrib->color24 >= 0)
@@ -3059,7 +3462,15 @@ void RS_FilterDXFRW::setEntityAttributes(RS_Entity* entity,
     pen.setColor(numberToColor(attrib->color));
 
     // Linetype:
-    pen.setLineType(nameToLineType( QString::fromUtf8(attrib->lineType.c_str()) ));
+    QString lineTypeName = QString::fromUtf8(attrib->lineType.c_str());
+    RS2::LineType ltype;
+    if (m_linetypeCache.contains(lineTypeName)) {
+        ltype = m_linetypeCache.value(lineTypeName);
+    } else {
+        ltype = nameToLineType(lineTypeName);
+        m_linetypeCache.insert(lineTypeName, ltype);
+    }
+    pen.setLineType(ltype);
 
     // Width:
     pen.setWidth(numberToWidth(attrib->lWeight));
@@ -3722,21 +4133,39 @@ QString RS_FilterDXFRW::toDxfString(const QString& str) {
 QString RS_FilterDXFRW::toNativeString(const QString& data) {
     QString res;
 
+    // Decode \U+XXXX unicode escape sequences:
+    QString input = data;
+    int uPos = 0;
+    while ((uPos = input.indexOf("\\U+", uPos, Qt::CaseInsensitive)) != -1) {
+        if (uPos + 7 <= input.length()) {
+            QString hexStr = input.mid(uPos + 3, 4);
+            bool ok = false;
+            ushort ucode = hexStr.toUShort(&ok, 16);
+            if (ok) {
+                input.replace(uPos, 7, QChar(ucode));
+            } else {
+                uPos += 3;
+            }
+        } else {
+            break;
+        }
+    }
+
     // Ignore font tags:
     int j = 0;
-    for (int i=0; i<data.length(); ++i) {
-        if (data.at(i).unicode() == 0x7B){ //is '{' ?
-            if (data.at(i+1).unicode() == 0x5c){ //and is "{\" ?
+    for (int i=0; i<input.length(); ++i) {
+        if (input.at(i).unicode() == 0x7B){ //is '{' ?
+            if (i+1 < input.length() && input.at(i+1).unicode() == 0x5c){ //and is "{\" ?
                 //check known codes
-                if ( (data.at(i+2).unicode() == 0x66) || //is "\f" ?
-                     (data.at(i+2).unicode() == 0x48) || //is "\H" ?
-                     (data.at(i+2).unicode() == 0x43)    //is "\C" ?
-                   ) {
+                if (i+2 < input.length() && ((input.at(i+2).unicode() == 0x66) || //is "\f" ?
+                     (input.at(i+2).unicode() == 0x48) || //is "\H" ?
+                     (input.at(i+2).unicode() == 0x43)))   //is "\C" ?
+                   {
                     //found tag, append parsed part
-                    res.append(data.mid(j,i-j));
-                    int pos = data.indexOf(0x7D, i+3);//find '}'
+                    res.append(input.mid(j,i-j));
+                    int pos = input.indexOf(0x7D, i+3);//find '}'
                     if (pos <0) break; //'}' not found
-                    QString tmp = data.mid(i+1, pos-i-1);
+                    QString tmp = input.mid(i+1, pos-i-1);
                     do {
                         tmp = tmp.remove(0,tmp.indexOf(0x3B, 0)+1 );//remove to ';'
                     } while(tmp.startsWith("\\f") || tmp.startsWith("\\H") || tmp.startsWith("\\C"));
@@ -3747,7 +4176,7 @@ QString RS_FilterDXFRW::toNativeString(const QString& data) {
             }
         }
     }
-    res.append(data.mid(j));
+    res.append(input.mid(j));
 
     // Line feed:
     res = res.replace(QRegExp("\\\\P"), "\n");

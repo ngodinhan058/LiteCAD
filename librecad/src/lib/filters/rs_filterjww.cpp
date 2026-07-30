@@ -109,6 +109,7 @@ bool RS_FilterJWW::fileImport(RS_Graphic& g, const QString& file, RS2::FormatTyp
 
         RS_DEBUG->print("graphic->countLayers(): %d", graphic->countLayers());
 
+        graphic->addVariable("$DWGCODEPAGE", "Shift-JIS", 3);
         //graphic->setAutoUpdateBorders(false);
         RS_DEBUG->print("RS_FilterJWW::fileImport: reading file");
         bool success = jww.in((const char*)QFile::encodeName(file), this);
@@ -471,13 +472,9 @@ void RS_FilterJWW::addInsert(const DL_InsertData& data) {
  * Implementation of the method which handles text
  * chunks for MText entities.
  */
-/**
- * Implementation of the method which handles text
- * chunks for MText entities.
- */
 void RS_FilterJWW::addMTextChunk(const char* text) {
     RS_DEBUG->print("RS_FilterJWW::addMTextChunk: %s", text);
-    mtext+=text;
+    mtext += text;
 }
 
 /*
@@ -545,14 +542,14 @@ void RS_FilterJWW::addMText(const DL_MTextData& data) {
                 lss = RS_MTextData::Exact;
         }
 
-    mtext+=data.text.c_str();
-    mtext = toNativeString(mtext.toLocal8Bit().data(), getDXFEncoding());
+    mtext += data.text.c_str();
+    QString unicodeMText = toNativeString(mtext.c_str(), getDXFEncoding());
 
         // use default style for the drawing:
         if (sty.isEmpty()) {
                 // japanese, cyrillic:
                 QString codepage = variables.getString("$DWGCODEPAGE", "ANSI_1252");
-                if (codepage=="ANSI_932" || codepage=="ANSI_1251") {
+                if (codepage=="ANSI_932" || codepage=="ANSI_1251" || codepage=="Shift-JIS") {
                         sty = "Unicode";
                 } else {
                         sty = variables.getString("$TEXTSTYLE", "Standard");
@@ -560,13 +557,13 @@ void RS_FilterJWW::addMText(const DL_MTextData& data) {
         }
 
         RS_DEBUG->print("Text as unicode:");
-        RS_DEBUG->printUnicode(mtext);
+        RS_DEBUG->printUnicode(unicodeMText);
 
         RS_MTextData d(ip, data.height, data.width,
                                   valign, halign,
                                   dir, lss,
                                   data.lineSpacingFactor,
-                                  mtext, sty, data.angle,
+                                  unicodeMText, sty, data.angle,
                                   RS2::NoUpdate);
         RS_MText* entity = new RS_MText(currentContainer, d);
 
@@ -574,7 +571,7 @@ void RS_FilterJWW::addMText(const DL_MTextData& data) {
         entity->update();
         currentContainer->addEntity(entity);
 
-        mtext = "";
+        mtext.clear();
 }
 
 
@@ -652,7 +649,7 @@ void RS_FilterJWW::addText(const DL_TextData& data) {
         int drawingDirection = 5;
         double width = 100.0;
 
-        mtext = "";
+        mtext.clear();
         addMText(DL_MTextData(
                                  refPoint.x,
                                  refPoint.y,
@@ -2501,7 +2498,13 @@ void RS_FilterJWW::setEntityAttributes(RS_Entity* entity,
         }
 
         // Color:
-        pen.setColor(numberToColor(attrib.getColor()));
+        if (attrib.getColor24() != -1) {
+            pen.setColor(RS_Color(attrib.getColor24() >> 16 & 0xFF,
+                                  attrib.getColor24() >> 8 & 0xFF,
+                                  attrib.getColor24() & 0xFF));
+        } else {
+            pen.setColor(numberToColor(attrib.getColor()));
+        }
 
         // Linetype:
         pen.setLineType(nameToLineType(attrib.getLineType().c_str()));
@@ -3074,16 +3077,16 @@ QString RS_FilterJWW::toDxfString(const QString& string) {
  * Converts a DXF encoded string into a native Unicode string.
  */
 QString RS_FilterJWW::toNativeString(const char* data, const QString& encoding) {
-    QString res = QString(data);
+    QString res;
 
-    /*	- If the given string doesn't contain any unicode characters, we pass
-     *	  the string through a textcoder.
+    /*	- We always pass the string through a textcoder for JWW files
+     *	  because they are in Shift-JIS encoding.
      *	--------------------------------------------------------------------- */
-    if (!res.contains("\\U+")) {
-        QTextCodec *codec = QTextCodec::codecForName(encoding.toLatin1());
-        if (codec)
-            res = codec->toUnicode(data);
-    }
+    QTextCodec *codec = QTextCodec::codecForName(encoding.toLatin1());
+    if (codec)
+        res = codec->toUnicode(data);
+    else
+        res = QString(data);
 
     // Line feed:
     res = res.replace(QRegExp("\\\\P"), "\n");

@@ -25,7 +25,10 @@
 **********************************************************************/
 
 #include <cmath>
-#include <iostream>
+#include <QCoreApplication>
+#include <QEventLoop>
+#include <QThread>
+#include <QTextStream>
 #include <set>
 
 #include <QtGlobal>
@@ -559,22 +562,23 @@ double RS_EntityContainer::totalSelectedLength() {
  * Adjusts the borders of this graphic (max/min values)
  */
 void RS_EntityContainer::adjustBorders(RS_Entity* entity) {
-    //RS_DEBUG->print("RS_EntityContainer::adjustBorders");
-    //resetBorders();
-
     if (entity) {
-        // make sure a container is not empty (otherwise the border
-        //   would get extended to 0/0):
         if (!entity->isContainer() || entity->count()>0) {
-            minV = RS_Vector::minimum(entity->getMin(),minV);
-            maxV = RS_Vector::maximum(entity->getMax(),maxV);
-        }
+            RS_Vector eMin = entity->getMin();
+            RS_Vector eMax = entity->getMax();
 
-        // Notify parents. The border for the parent might
-        // also change TODO: Check for efficiency
-        //if(parent) {
-        //parent->adjustBorders(this);
-        //}
+            if (eMin.valid && eMax.valid &&
+                std::isfinite(eMin.x) && std::isfinite(eMin.y) &&
+                std::isfinite(eMax.x) && std::isfinite(eMax.y) &&
+                eMin.x >= RS_MINDOUBLE && eMin.x <= RS_MAXDOUBLE &&
+                eMin.y >= RS_MINDOUBLE && eMin.y <= RS_MAXDOUBLE &&
+                eMax.x >= RS_MINDOUBLE && eMax.x <= RS_MAXDOUBLE &&
+                eMax.y >= RS_MINDOUBLE && eMax.y <= RS_MAXDOUBLE) {
+
+                minV = RS_Vector::minimum(eMin, minV);
+                maxV = RS_Vector::maximum(eMax, maxV);
+            }
+        }
     }
 }
 
@@ -1640,6 +1644,11 @@ bool RS_EntityContainer::optimizeContours() {
     RS_Entity* next = nullptr;
     /** connect entities **/
     while (count()>0) {
+        if (count() % 100 == 0) {
+            if (QThread::currentThread() == QCoreApplication::instance()->thread()) {
+                QCoreApplication::processEvents(QEventLoop::AllEvents, 5);
+            }
+        }
         double dist = 0.;
         RS_Vector vpTmp = getNearestEndpoint(vpEnd,&dist,&next);
         if (dist > contourTolerance) {

@@ -50,6 +50,7 @@ public:
         setColor(0);
         setWidth(0);
         setLineType("BYLAYER");
+        setColor24(-1);
     }
 
 
@@ -67,11 +68,12 @@ public:
      */
     DL_Attributes(const string& layer,
                   int color, int width,
-                  const string& lineType) {
+                  const string& lineType, int color24 = -1) {
         setLayer(layer);
         setColor(color);
         setWidth(width);
         setLineType(lineType);
+        setColor24(color24);
     }
 
 
@@ -156,11 +158,20 @@ public:
         }
     }
 
+    void setColor24(int color24) {
+        this->color24 = color24;
+    }
+
+    int getColor24() const {
+        return color24;
+    }
+
 private:
     string layer;
     int color;
     int width;
     string lineType;
+    int color24;
 };
 
 #endif
