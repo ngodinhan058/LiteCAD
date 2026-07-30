@@ -14,11 +14,15 @@ build/
 cmake-build-debug/
 appdir/
 unix/
+AI_PROGRESS.md
+DWG_READ_FLOW.md
+external\libredwg
 windows/
 release/
 debug/
 html/
 __pycache__/
+libredwg-0.14.8492-win64/
 
 # Object and archive/library files
 *.o

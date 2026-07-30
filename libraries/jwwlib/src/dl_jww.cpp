@@ -130,11 +130,7 @@ void DL_Jww::CreateSen(DL_CreationInterface* creationInterface, CDataSen& DSen)
     if(DSen.m_nPenWidth > 26)
         std::cout << "線色幅 " << (jwWORD)DSen.m_nPenWidth << std::endl;//線色幅
 //#endif
-    int width;
-	if(DSen.m_nPenWidth > 26)
-		width = 0;
-	else
-		width = DSen.m_nPenWidth;
+	int width = -1; // Default to ByLayer to avoid mapping Pen Index to thick DXF line widths
 	int color = (DSen.m_nPenColor < ArraySize(colTable)) ? colTable[DSen.m_nPenColor] : DSen.m_nPenColor;
     if (color == 256) color = 7;
     int color24 = -1;
@@ -229,11 +225,7 @@ void DL_Jww::CreateEnko(DL_CreationInterface* creationInterface, CDataEnko& DEnk
 {
 	string lName = getLayerName(DEnko.m_nGLayer, DEnko.m_nLayer);
 
-	int width;
-	if(DEnko.m_nPenWidth > 26)
-		width = 0;
-	else
-		width = DEnko.m_nPenWidth;
+	int width = -1; // Default to ByLayer
 	int color = (DEnko.m_nPenColor < ArraySize(colTable)) ? colTable[DEnko.m_nPenColor] : DEnko.m_nPenColor;
     if (color == 256) color = 7;
     int color24 = -1;
@@ -439,11 +431,7 @@ void DL_Jww::CreateTen(DL_CreationInterface* creationInterface, CDataTen& DTen)
 {
 	string lName = getLayerName(DTen.m_nGLayer, DTen.m_nLayer);
 
-	int width;
-	if(DTen.m_nPenWidth > 26)
-		width = 0;
-	else
-		width = DTen.m_nPenWidth;
+	int width = -1; // Default to ByLayer
 	int color = (DTen.m_nPenColor < ArraySize(colTable)) ? colTable[DTen.m_nPenColor] : DTen.m_nPenColor;
     if (color == 256) color = 7;
     int color24 = -1;
@@ -507,11 +495,7 @@ void DL_Jww::CreateMoji(DL_CreationInterface* creationInterface, CDataMoji& DMoj
 {
 	string lName = getLayerName(DMoji.m_nGLayer, DMoji.m_nLayer);
 
-	int width;
-	if(DMoji.m_nPenWidth > 26)
-		width = 0;
-	else
-		width = DMoji.m_nPenWidth;
+	int width = -1; // Default to ByLayer
 	int color = (DMoji.m_nPenColor < ArraySize(colTable)) ? colTable[DMoji.m_nPenColor] : DMoji.m_nPenColor;
     if (color == 256) color = 7;
     int color24 = -1;
@@ -663,11 +647,7 @@ void DL_Jww::CreateSunpou(DL_CreationInterface* creationInterface, CDataSunpou& 
 {
 	string lName = getLayerName(DSunpou.m_nGLayer, DSunpou.m_nLayer);
 
-	int width;
-	if(DSunpou.m_nPenWidth > 26)
-		width = 0;
-	else
-		width = DSunpou.m_nPenWidth;
+	int width = -1; // Default to ByLayer
 	int color = (DSunpou.m_nPenColor < ArraySize(colTable)) ? colTable[DSunpou.m_nPenColor] : DSunpou.m_nPenColor;
     if (color == 256) color = 7;
     int color24 = -1;

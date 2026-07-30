@@ -677,6 +677,17 @@ void QG_GraphicView::mouseMoveEvent(QMouseEvent* event)
     m_panData->panTimer.reset();
     event->accept();
 
+    // Do not perform passive snap tracking while dragging (e.g. middle mouse panning)
+    // This prevents massive lag and coordinate jumping during pan operations
+    if (event->buttons() != Qt::NoButton) {
+        this->currentMouse = RS_Vector(false);
+        m_isCursorSnapped = false;
+        if (eventHandler != nullptr) {
+            eventHandler->mouseMoveEvent(event);
+        }
+        return;
+    }
+
     // Passive Snap Tracking & Preview on Hover (AutoCAD standard 10px APERTURE catchment radius)
     RS_Vector mousePos = RS_GraphicView::toGraph(event->x(), event->y());
     RS_Vector snapPos = passiveTrackSnap(mousePos);

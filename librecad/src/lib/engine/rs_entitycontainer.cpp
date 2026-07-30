@@ -1499,6 +1499,21 @@ double RS_EntityContainer::getDistanceToPoint(const RS_Vector& coord,
             RS_DEBUG->print("entity: %d", e->rtti());
             // bug#426, need to ignore Images to find nearest intersections
             if(level==RS2::ResolveAllButTextImage && e->rtti()==RS2::EntityImage) continue;
+
+            // Fast bounding box reject to significantly improve snapping performance
+            if (minDist < RS_MAXDOUBLE) {
+                RS_Vector minP = e->getMin();
+                RS_Vector maxP = e->getMax();
+                if (minP.valid && maxP.valid) {
+                    double dx = std::max(0.0, std::max(minP.x - coord.x, coord.x - maxP.x));
+                    double dy = std::max(0.0, std::max(minP.y - coord.y, coord.y - maxP.y));
+                    double distSq = dx*dx + dy*dy;
+                    if (distSq > minDist * minDist) {
+                        continue;
+                    }
+                }
+            }
+
             curDist = e->getDistanceToPoint(coord, &subEntity, level, solidDist);
 
             RS_DEBUG->print("entity: getDistanceToPoint: OK");
