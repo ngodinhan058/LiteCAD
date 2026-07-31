@@ -63,6 +63,8 @@
 #include "rs_insert.h"
 #include "rs_math.h"
 #include "rs_modification.h"
+#include "lc_widgetcanvas.h"
+#include "lc_openglcanvas.h"
 #include "rs_painterqt.h"
 #include "rs_settings.h"
 #include "rs_snapper.h"
@@ -283,6 +285,9 @@ QG_GraphicView::QG_GraphicView(QWidget* parent, Qt::WindowFlags f, RS_Document* 
     setFactorY(4.0);
     setBorders(10, 10, 10, 10);
 
+    // Default to widget canvas
+    switchRenderer(Widget);
+
     setMouseTracking(true);
     setFocusPolicy(Qt::NoFocus);
 
@@ -435,13 +440,19 @@ void QG_GraphicView::updateGridStatusWidget(QString text)
  */
 void QG_GraphicView::redraw(RS2::RedrawMethod method) {
         redrawMethod=(RS2::RedrawMethod ) (redrawMethod | method);
-        update(); // Paint when reeady to pain
-//	repaint(); //Paint immediate
+        if (m_renderCanvas) {
+            m_renderCanvas->requestUpdate();
+        } else {
+            update(); // Paint when reeady to pain
+        }
 }
 
 
 void QG_GraphicView::resizeEvent(QResizeEvent* /*e*/) {
     RS_DEBUG->print("QG_GraphicView::resizeEvent begin");
+    if (!layout && m_renderCanvas) {
+        m_renderCanvas->asWidget()->resize(size());
+    }
     adjustOffsetControls();
     adjustZoomControls();
 //     updateGrid();
@@ -1459,7 +1470,34 @@ void QG_GraphicView::layerActivated(RS_Layer *layer) {
  */
 #include "rs_benchmark.h"
 
-void QG_GraphicView::paintEvent(QPaintEvent *)
+void QG_GraphicView::switchRenderer(RendererType type)
+{
+    if (m_renderCanvas) {
+        if (layout) {
+            layout->removeWidget(m_renderCanvas->asWidget());
+        }
+        delete m_renderCanvas->asWidget();
+        m_renderCanvas = nullptr;
+    }
+
+    if (type == Widget) {
+        m_renderCanvas = new LC_WidgetCanvas(this, this);
+    } else if (type == OpenGL) {
+        m_renderCanvas = new LC_OpenGLCanvas(this, this);
+    }
+    
+    if (m_renderCanvas) {
+        // Must show explicitly if parent is already shown
+        m_renderCanvas->asWidget()->show();
+        if (layout) {
+            layout->addWidget(m_renderCanvas->asWidget(), 0, 0);
+        } else {
+            m_renderCanvas->asWidget()->resize(size());
+        }
+    }
+}
+
+void QG_GraphicView::renderScene(QPainter* painter)
 {
     RS_BENCH->beginFrame();
     // Re-Create or get the layering pixmaps
@@ -1508,27 +1546,26 @@ void QG_GraphicView::paintEvent(QPaintEvent *)
     }
 
     // Finally paint the layers back on the screen, bitblk to the rescue!
-    RS_PainterQt wPainter(this);
-    wPainter.drawPixmap(0,0,*PixmapLayer1);
-    wPainter.drawPixmap(0,0,*PixmapLayer2);
-    wPainter.drawPixmap(0,0,*PixmapLayer3);
-    
-    if (RS_BENCH->isOverlayEnabled() && !RS_BENCH->getOverlayText().isEmpty()) {
-        wPainter.QPainter::setPen(Qt::green);
-        QFont f = wPainter.QPainter::font();
-        f.setFamily("Monospace");
-        f.setBold(true);
-        f.setPointSize(10);
-        wPainter.QPainter::setFont(f);
+    if (painter) {
+        painter->drawPixmap(0,0,*PixmapLayer1);
+        painter->drawPixmap(0,0,*PixmapLayer2);
+        painter->drawPixmap(0,0,*PixmapLayer3);
         
-        QString txt = RS_BENCH->getOverlayText();
-        QRect rect = wPainter.QPainter::fontMetrics().boundingRect(QRect(10, 10, 0, 0), Qt::AlignLeft | Qt::AlignTop, txt);
-        rect.adjust(-5, -5, 5, 5);
-        wPainter.QPainter::fillRect(rect, QColor(0, 0, 0, 180));
-        wPainter.QPainter::drawText(QRect(10, 10, rect.width(), rect.height()), Qt::AlignLeft | Qt::AlignTop, txt);
+        if (RS_BENCH->isOverlayEnabled() && !RS_BENCH->getOverlayText().isEmpty()) {
+            painter->setPen(Qt::green);
+            QFont f = painter->font();
+            f.setFamily("Monospace");
+            f.setBold(true);
+            f.setPointSize(10);
+            painter->setFont(f);
+            
+            QString txt = RS_BENCH->getOverlayText();
+            QRect rect = painter->fontMetrics().boundingRect(QRect(10, 10, 0, 0), Qt::AlignLeft | Qt::AlignTop, txt);
+            rect.adjust(-5, -5, 5, 5);
+            painter->fillRect(rect, QColor(0, 0, 0, 180));
+            painter->drawText(QRect(10, 10, rect.width(), rect.height()), Qt::AlignLeft | Qt::AlignTop, txt);
+        }
     }
-    
-    wPainter.end();
     
     RS_BENCH->setViewportMetrics(getWidth(), getHeight(), getFactor().x);
     RS_BENCH->endFrame();
@@ -1569,6 +1606,10 @@ void QG_GraphicView::addScrollbars()
     layout->addWidget(vScrollBar, 0, 1);
     connect(vScrollBar, SIGNAL(valueChanged(int)),
             this, SLOT(slotVScrolled(int)));
+            
+    if (m_renderCanvas) {
+        layout->addWidget(m_renderCanvas->asWidget(), 0, 0);
+    }
 }
 
 bool QG_GraphicView::hasScrollbars()

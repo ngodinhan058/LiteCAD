@@ -102,6 +102,10 @@ public:
     void addScrollbars();
     bool hasScrollbars();
 
+    enum RendererType { Widget, OpenGL };
+    void switchRenderer(RendererType type);
+    void renderScene(QPainter* painter);
+
     void setCurrentQAction(QAction* q_action);
 
     QString device;
@@ -125,7 +129,6 @@ protected:
 
 	bool event(QEvent * e) override;
 
-	void paintEvent(QPaintEvent *)override;
 	void resizeEvent(QResizeEvent* e) override;
 
     QList<QAction*> recent_actions;
@@ -162,6 +165,8 @@ protected:
 		
     //! Keep tracks of if we are currently doing a high-resolution scrolling
     bool isSmoothScrolling;
+
+    class IRenderCanvas* m_renderCanvas = nullptr;
 
     QMap<QString, QMenu*> menus;
 

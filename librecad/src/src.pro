@@ -237,6 +237,9 @@ HEADERS += \
     lib/gui/rs_painter.h \
     lib/gui/rs_painterqt.h \
     lib/gui/rs_staticgraphicview.h \
+    lib/gui/i_rendercanvas.h \
+    lib/gui/lc_widgetcanvas.h \
+    lib/gui/lc_openglcanvas.h \
     lib/information/rs_locale.h \
     lib/information/rs_information.h \
     lib/information/rs_infoarea.h \
@@ -320,6 +323,8 @@ SOURCES += \
     lib/debug/rs_debug.cpp \
     lib/debug/rs_benchmark.cpp \
     lib/debug/lc_crashhandler.cpp \
+    lib/gui/lc_widgetcanvas.cpp \
+    lib/gui/lc_openglcanvas.cpp \
     lib/engine/lc_looputils.cpp \
     lib/engine/lc_parabola.cpp \
     lib/engine/rs_arc.cpp \
