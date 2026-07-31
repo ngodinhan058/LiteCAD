@@ -1126,6 +1126,8 @@ void RS_GraphicView::drawEntity(RS_Painter *painter, RS_Entity* e) {
 	double offset(0.);
 	drawEntity(painter,e,offset);
 }
+#include "rs_benchmark.h"
+
 void RS_GraphicView::drawEntity(RS_Painter *painter, RS_Entity* e, double& patternOffset) {
 
 	// update is disabled:
@@ -1150,8 +1152,11 @@ void RS_GraphicView::drawEntity(RS_Painter *painter, RS_Entity* e, double& patte
         e->rtti() != RS2::EntityGraphic &&
        (toGuiX(e->getMax().x)<0 || toGuiX(e->getMin().x)>getWidth() ||
         toGuiY(e->getMin().y)<0 || toGuiY(e->getMax().y)>getHeight())) {
+        RS_BENCH->incrementCounter("CulledEntities");
         return;
     }
+    
+    RS_BENCH->incrementCounter("VisibleEntities");
 
 	// set pen (color):
     setPenForEntity(painter, e, patternOffset);

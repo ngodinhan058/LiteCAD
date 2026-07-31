@@ -1457,9 +1457,11 @@ void QG_GraphicView::layerActivated(RS_Layer *layer) {
  * usually that's very fast since we only paint the buffer we
  * have from the last call..
  */
+#include "rs_benchmark.h"
+
 void QG_GraphicView::paintEvent(QPaintEvent *)
 {
-
+    RS_BENCH->beginFrame();
     // Re-Create or get the layering pixmaps
     getPixmapForView(PixmapLayer1);
     getPixmapForView(PixmapLayer2);
@@ -1510,8 +1512,26 @@ void QG_GraphicView::paintEvent(QPaintEvent *)
     wPainter.drawPixmap(0,0,*PixmapLayer1);
     wPainter.drawPixmap(0,0,*PixmapLayer2);
     wPainter.drawPixmap(0,0,*PixmapLayer3);
+    
+    if (RS_BENCH->isOverlayEnabled() && !RS_BENCH->getOverlayText().isEmpty()) {
+        wPainter.QPainter::setPen(Qt::green);
+        QFont f = wPainter.QPainter::font();
+        f.setFamily("Monospace");
+        f.setBold(true);
+        f.setPointSize(10);
+        wPainter.QPainter::setFont(f);
+        
+        QString txt = RS_BENCH->getOverlayText();
+        QRect rect = wPainter.QPainter::fontMetrics().boundingRect(QRect(10, 10, 0, 0), Qt::AlignLeft | Qt::AlignTop, txt);
+        rect.adjust(-5, -5, 5, 5);
+        wPainter.QPainter::fillRect(rect, QColor(0, 0, 0, 180));
+        wPainter.QPainter::drawText(QRect(10, 10, rect.width(), rect.height()), Qt::AlignLeft | Qt::AlignTop, txt);
+    }
+    
     wPainter.end();
-
+    
+    RS_BENCH->setViewportMetrics(getWidth(), getHeight(), getFactor().x);
+    RS_BENCH->endFrame();
     redrawMethod=RS2::RedrawNone;
 }
 

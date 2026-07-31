@@ -156,6 +156,7 @@ HEADERS += \
     lib/actions/rs_snapper.h \
     lib/creation/rs_creation.h \
     lib/debug/rs_debug.h \
+    lib/debug/rs_benchmark.h \
     lib/debug/lc_crashhandler.h \
     lib/engine/lc_looputils.h \
     lib/engine/lc_parabola.h \
@@ -317,6 +318,7 @@ SOURCES += \
     lib/actions/rs_snapper.cpp \
     lib/creation/rs_creation.cpp \
     lib/debug/rs_debug.cpp \
+    lib/debug/rs_benchmark.cpp \
     lib/debug/lc_crashhandler.cpp \
     lib/engine/lc_looputils.cpp \
     lib/engine/lc_parabola.cpp \

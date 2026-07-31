@@ -1,0 +1,12 @@
+- `[x]` **Phase 0: Benchmarking & Profiling**
+  - `[x]` Implement `RS_Benchmark` class to measure and log metrics
+  - `[x]` Measure FPS and Frame Times (Average, 95th, 99th percentiles)
+  - `[x]` Measure Render Time and Culled Entities
+  - `[x]` Measure Snapping, Selection, and File Load Latency
+- `[ ]` **Phase 1: `IRenderer` & Context Setup**
+- `[ ]` **Phase 2: Total Decoupling (`CachedEntity`)**
+- `[ ]` **Phase 3: Geometry Extraction & Hybrid VBO Allocation**
+- `[ ]` **Phase 4: Incremental Updates (`glBufferSubData`)**
+- `[ ]` **Phase 5: Complex Entities & Text**
+- `[ ]` **Phase 6: Selection & Interaction Overlays**
+- `[ ]` **Phase 7: Advanced Renderer Optimization**
