@@ -112,6 +112,7 @@ public:
     void notifyEntityRemoved(unsigned int entityId) override;
 
 public:
+    class LC_CachedScene* getCachedScene() const { return m_cachedScene; }
     QString device;
 
 public slots:

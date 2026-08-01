@@ -5,6 +5,7 @@
 #include <vector>
 #include <memory>
 #include "lc_cachedentity.h"
+#include "lc_rect.h"
 
 class ISpatialIndex;
 class RS_Entity;
@@ -44,15 +45,19 @@ public:
     void notifyEntityRemoved(unsigned int entityId);
 
     /**
-     * @brief Query visible entities intersecting the viewport.
-     * @param viewport The area to query.
-     * @param outEntities Populated with pointers to the cached entities.
+     * @brief Retrieve entities intersecting a region.
      */
-    void getVisibleEntities(const LC_Rect& viewport, std::vector<CachedEntity>& outEntities) const;
+    void getVisibleEntities(const LC_Rect& region, std::vector<CachedEntity>& outEntities) const;
+
+    /**
+     * @brief Get the current revision number of the scene.
+     */
+    uint64_t getRevision() const { return m_revision; }
 
 private:
     std::unordered_map<unsigned int, CachedEntity> m_entities;
     std::unique_ptr<ISpatialIndex> m_spatialIndex;
+    uint64_t m_revision = 0;
 };
 
 #endif // LC_CACHEDSCENE_H

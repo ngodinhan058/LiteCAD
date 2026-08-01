@@ -4,6 +4,8 @@
 #include <QOpenGLWidget>
 #include <QOpenGLFunctions>
 #include "i_rendercanvas.h"
+#include "i_renderer.h"
+#include <memory>
 
 class QG_GraphicView;
 
@@ -25,6 +27,7 @@ protected:
 
 private:
     QG_GraphicView* m_view;
+    std::unique_ptr<IRenderer> m_renderer;
 };
 
 #endif // LC_OPENGLCANVAS_H

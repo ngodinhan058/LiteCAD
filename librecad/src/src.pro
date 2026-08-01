@@ -161,6 +161,7 @@ HEADERS += \
     lib/engine/lc_looputils.h \
     lib/engine/lc_parabola.h \
     lib/engine/rs.h \
+    lib/engine/i_renderer.h \
     lib/engine/rs_arc.h \
     lib/engine/rs_atomicentity.h \
     lib/engine/rs_block.h \
@@ -238,6 +239,7 @@ HEADERS += \
     lib/gui/rs_painterqt.h \
     lib/gui/rs_staticgraphicview.h \
     lib/gui/i_rendercanvas.h \
+    lib/gui/lc_openglrenderer.h \
     lib/gui/lc_widgetcanvas.h \
     lib/gui/lc_openglcanvas.h \
     lib/gui/lc_cachedentityrenderer.h \
@@ -331,6 +333,7 @@ SOURCES += \
     lib/debug/lc_crashhandler.cpp \
     lib/gui/lc_widgetcanvas.cpp \
     lib/gui/lc_openglcanvas.cpp \
+    lib/gui/lc_openglrenderer.cpp \
     lib/gui/lc_cachedentityrenderer.cpp \
     lib/engine/lc_geometrybuilder.cpp \
     lib/engine/lc_rtreespatialindex.cpp \
