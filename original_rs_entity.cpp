@@ -828,7 +828,7 @@ RS_Pen RS_Entity::getPen(bool resolve) const {
             //If parent is byblock check parent.parent (nested blocks)
             while (p.getColor().isByBlock()){
                 if (ep) {
-                    p.setColor(ep->getPen().getColor());
+                    p.setColor(parent->getPen().getColor());
                     ep = ep->parent;
                 } else
                     break;
@@ -836,7 +836,7 @@ RS_Pen RS_Entity::getPen(bool resolve) const {
             ep = parent;
             while (p.getWidth()==RS2::WidthByBlock){
                 if (ep) {
-                    p.setWidth(ep->getPen().getWidth());
+                    p.setWidth(parent->getPen().getWidth());
                     ep = ep->parent;
                 } else
                     break;
@@ -844,7 +844,7 @@ RS_Pen RS_Entity::getPen(bool resolve) const {
             ep = parent;
             while (p.getLineType()==RS2::LineByBlock){
                 if (ep) {
-                    p.setLineType(ep->getPen().getLineType());
+                    p.setLineType(parent->getPen().getLineType());
                     ep = ep->parent;
                 } else
                     break;
