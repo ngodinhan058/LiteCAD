@@ -66,6 +66,10 @@
 #include "lc_widgetcanvas.h"
 #include "lc_openglcanvas.h"
 #include "rs_painterqt.h"
+#include "rs_graphic.h"
+
+#include "../engine/lc_cachedscene.h"
+#include "lc_cachedentityrenderer.h"
 #include "rs_settings.h"
 #include "rs_snapper.h"
 #include "rs_overlayline.h"
@@ -284,6 +288,8 @@ QG_GraphicView::QG_GraphicView(QWidget* parent, Qt::WindowFlags f, RS_Document* 
     setFactorX(4.0);
     setFactorY(4.0);
     setBorders(10, 10, 10, 10);
+
+    m_cachedScene = new LC_CachedScene();
 
     // Default to widget canvas
     switchRenderer(Widget);
@@ -1497,6 +1503,28 @@ void QG_GraphicView::switchRenderer(RendererType type)
     }
 }
 
+void QG_GraphicView::setContainer(RS_EntityContainer* container)
+{
+    RS_GraphicView::setContainer(container);
+    if (m_cachedScene) {
+        m_cachedScene->populate(container);
+    }
+}
+
+void QG_GraphicView::notifyEntityChanged(RS_Entity* entity)
+{
+    if (m_cachedScene) {
+        m_cachedScene->notifyEntityChanged(entity);
+    }
+}
+
+void QG_GraphicView::notifyEntityRemoved(unsigned int entityId)
+{
+    if (m_cachedScene) {
+        m_cachedScene->notifyEntityRemoved(entityId);
+    }
+}
+
 void QG_GraphicView::renderScene(QPainter* painter)
 {
     RS_BENCH->beginFrame();
@@ -1526,10 +1554,35 @@ void QG_GraphicView::renderScene(QPainter* painter)
             painter2.setRenderHint(QPainter::Antialiasing);
         }
         painter2.setDrawingMode(drawingMode);
+        
+        // Use CachedScene instead of RS_Entity iteration
+        // NOTE: Bypassed for Phase 1 to prevent use-after-free crashes (observer not fully hooked up yet)
+        /*
+        std::vector<CachedEntity> visibleEntities;
+        if (m_cachedScene) {
+            m_cachedScene->getVisibleEntities(view_rect, visibleEntities);
+            
+            painter2.setDrawSelectedOnly(false);
+            for (const CachedEntity& ce : visibleEntities) {
+                if (!ce.selected) {
+                    LC_CachedEntityRenderer::render((RS_Painter*)&painter2, &ce, this);
+                }
+            }
+            
+            painter2.setDrawSelectedOnly(true);
+            for (const CachedEntity& ce : visibleEntities) {
+                if (ce.selected) {
+                    LC_CachedEntityRenderer::render((RS_Painter*)&painter2, &ce, this);
+                }
+            }
+        }
+        */
         painter2.setDrawSelectedOnly(false);
         drawLayer2((RS_Painter*)&painter2);
+        
         painter2.setDrawSelectedOnly(true);
         drawLayer2((RS_Painter*)&painter2);
+        
         painter2.end();
     }
 

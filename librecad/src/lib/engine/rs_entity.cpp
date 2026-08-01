@@ -38,6 +38,7 @@
 #include "rs_entity.h"
 #include "rs_graphic.h"
 #include "rs_graphicview.h"
+#include "rs_document.h"
 #include "rs_information.h"
 #include "rs_insert.h"
 #include "rs_layer.h"
@@ -139,6 +140,10 @@ bool RS_Entity::setSelected(bool select) {
         setFlag(RS2::FlagSelected);
     } else {
         delFlag(RS2::FlagSelected);
+    }
+    
+    if (getDocument() && getDocument()->getGraphicView()) {
+        getDocument()->getGraphicView()->notifyEntityChanged(this);
     }
 
     return true;
@@ -424,6 +429,10 @@ void RS_Entity::setVisible(bool v) {
 	} else {
 		delFlag(RS2::FlagVisible);
 	}
+    
+    if (getDocument() && getDocument()->getGraphicView()) {
+        getDocument()->getGraphicView()->notifyEntityChanged(this);
+    }
 }
 
 /**
@@ -435,6 +444,10 @@ void RS_Entity::setHighlighted(bool on) {
         setFlag(RS2::FlagHighlighted);
     } else {
         delFlag(RS2::FlagHighlighted);
+    }
+    
+    if (getDocument() && getDocument()->getGraphicView()) {
+        getDocument()->getGraphicView()->notifyEntityChanged(this);
     }
 }
 

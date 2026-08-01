@@ -1150,6 +1150,9 @@ void RS_GraphicView::drawEntity(RS_Painter *painter, RS_Entity* e, double& patte
     // test if the entity is in the viewport
     if (!isPrinting() &&
         e->rtti() != RS2::EntityGraphic &&
+        e->getMin().valid && e->getMax().valid &&
+        e->getMin().x <= e->getMax().x &&
+        e->getMin().y <= e->getMax().y &&
        (toGuiX(e->getMax().x)<0 || toGuiX(e->getMin().x)>getWidth() ||
         toGuiY(e->getMin().y)<0 || toGuiY(e->getMax().y)>getHeight())) {
         RS_BENCH->incrementCounter("CulledEntities");
@@ -1224,7 +1227,6 @@ void RS_GraphicView::drawEntityPlain(RS_Painter *painter, RS_Entity* e, double& 
 	if (!e->isContainer() && (e->isSelected()!=painter->shouldDrawSelected())) {
 		return;
 	}
-
 	e->draw(painter, this, patternOffset);
 
 }

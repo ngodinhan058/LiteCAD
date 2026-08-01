@@ -73,6 +73,10 @@ public:
 	virtual ~RS_GraphicView();
 
     void cleanUp();
+    
+    // Notifications for rendering cache
+    virtual void notifyEntityChanged(RS_Entity* /*entity*/) {}
+    virtual void notifyEntityRemoved(unsigned int /*entityId*/) {}
 
 	/**
 	 * @return Pointer to the graphic entity if the entity container
@@ -189,7 +193,7 @@ public:
 	 */
     virtual void setMouseCursor(RS2::CursorType /*c*/) = 0;
 
-	void setContainer(RS_EntityContainer* container);
+	virtual void setContainer(RS_EntityContainer* container);
 	RS_EntityContainer* getContainer() const;
 	void setFactor(double f);
 	void setFactorX(double f);

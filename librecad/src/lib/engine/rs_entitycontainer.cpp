@@ -115,10 +115,21 @@ RS_EntityContainer::RS_EntityContainer(const RS_EntityContainer& ec)
  */
 RS_EntityContainer::~RS_EntityContainer() {
     if (autoDelete) {
-        while (!entities.isEmpty())
-            delete entities.takeFirst();
-    } else
+        while (!entities.isEmpty()) {
+            RS_Entity* entity = entities.takeFirst();
+            if (getDocument() && getDocument()->getGraphicView()) {
+                getDocument()->getGraphicView()->notifyEntityRemoved(entity->getId());
+            }
+            delete entity;
+        }
+    } else {
+        if (getDocument() && getDocument()->getGraphicView()) {
+            for (RS_Entity* entity : entities) {
+                getDocument()->getGraphicView()->notifyEntityRemoved(entity->getId());
+            }
+        }
         entities.clear();
+    }
 }
 
 
@@ -371,6 +382,10 @@ void RS_EntityContainer::addEntity(RS_Entity* entity) {
     if (autoUpdateBorders) {
         adjustBorders(entity);
     }
+    
+    if (getDocument() && getDocument()->getGraphicView()) {
+        getDocument()->getGraphicView()->notifyEntityChanged(entity);
+    }
 }
 
 
@@ -444,6 +459,10 @@ void RS_EntityContainer::insertEntity(int index, RS_Entity* entity) {
     if (autoUpdateBorders) {
         adjustBorders(entity);
     }
+    
+    if (getDocument() && getDocument()->getGraphicView()) {
+        getDocument()->getGraphicView()->notifyEntityChanged(entity);
+    }
 }
 
 
@@ -479,12 +498,17 @@ bool RS_EntityContainer::removeEntity(RS_Entity* entity) {
     //    in LibreCAD is never called with nullptr
     bool ret = entities.removeOne(entity);
 
+    if (ret && getDocument() && getDocument()->getGraphicView()) {
+        getDocument()->getGraphicView()->notifyEntityRemoved(entity->getId());
+    }
+
     if (autoDelete && ret) {
         delete entity;
     }
     if (autoUpdateBorders) {
         calculateBorders();
     }
+    
     return ret;
 }
 
@@ -495,10 +519,21 @@ bool RS_EntityContainer::removeEntity(RS_Entity* entity) {
  */
 void RS_EntityContainer::clear() {
     if (autoDelete) {
-        while (!entities.isEmpty())
-            delete entities.takeFirst();
-    } else
+        while (!entities.isEmpty()) {
+            RS_Entity* entity = entities.takeFirst();
+            if (getDocument() && getDocument()->getGraphicView()) {
+                getDocument()->getGraphicView()->notifyEntityRemoved(entity->getId());
+            }
+            delete entity;
+        }
+    } else {
+        if (getDocument() && getDocument()->getGraphicView()) {
+            for (RS_Entity* entity : entities) {
+                getDocument()->getGraphicView()->notifyEntityRemoved(entity->getId());
+            }
+        }
         entities.clear();
+    }
     resetBorders();
 }
 

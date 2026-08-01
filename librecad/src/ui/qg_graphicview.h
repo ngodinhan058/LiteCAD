@@ -104,11 +104,19 @@ public:
 
     enum RendererType { Widget, OpenGL };
     void switchRenderer(RendererType type);
-    void renderScene(QPainter* painter);
 
-    void setCurrentQAction(QAction* q_action);
+    void setContainer(class RS_EntityContainer* container) override;
 
+    // Notifications for rendering cache
+    void notifyEntityChanged(RS_Entity* entity) override;
+    void notifyEntityRemoved(unsigned int entityId) override;
+
+public:
     QString device;
+
+public slots:
+    void renderScene(QPainter* painter);
+    void setCurrentQAction(QAction* q_action);
 
     void destroyMenu(const QString& activator);
     void setMenu(const QString& activator, QMenu* menu);
@@ -167,6 +175,7 @@ protected:
     bool isSmoothScrolling;
 
     class IRenderCanvas* m_renderCanvas = nullptr;
+    class LC_CachedScene* m_cachedScene = nullptr;
 
     QMap<QString, QMenu*> menus;
 

@@ -240,6 +240,12 @@ HEADERS += \
     lib/gui/i_rendercanvas.h \
     lib/gui/lc_widgetcanvas.h \
     lib/gui/lc_openglcanvas.h \
+    lib/gui/lc_cachedentityrenderer.h \
+    lib/engine/lc_cachedentity.h \
+    lib/engine/lc_geometrybuilder.h \
+    lib/engine/i_spatialindex.h \
+    lib/engine/lc_rtreespatialindex.h \
+    lib/engine/lc_cachedscene.h \
     lib/information/rs_locale.h \
     lib/information/rs_information.h \
     lib/information/rs_infoarea.h \
@@ -325,6 +331,10 @@ SOURCES += \
     lib/debug/lc_crashhandler.cpp \
     lib/gui/lc_widgetcanvas.cpp \
     lib/gui/lc_openglcanvas.cpp \
+    lib/gui/lc_cachedentityrenderer.cpp \
+    lib/engine/lc_geometrybuilder.cpp \
+    lib/engine/lc_rtreespatialindex.cpp \
+    lib/engine/lc_cachedscene.cpp \
     lib/engine/lc_looputils.cpp \
     lib/engine/lc_parabola.cpp \
     lib/engine/rs_arc.cpp \
