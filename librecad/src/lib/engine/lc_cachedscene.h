@@ -54,8 +54,20 @@ public:
      */
     uint64_t getRevision() const { return m_revision; }
 
+    /**
+     * @brief Direct access to all cached entities (for GeometryCache).
+     */
+    const std::unordered_map<unsigned int, CachedEntity>& entities() const { return m_entities; }
+
+    /**
+     * @brief Get the revision when the given entity was last modified.
+     * Returns 0 if the entity does not exist.
+     */
+    uint64_t getEntityRevision(unsigned int entityId) const;
+
 private:
     std::unordered_map<unsigned int, CachedEntity> m_entities;
+    std::unordered_map<unsigned int, uint64_t> m_entityRevisions;
     std::unique_ptr<ISpatialIndex> m_spatialIndex;
     uint64_t m_revision = 0;
 };

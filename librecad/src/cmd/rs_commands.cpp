@@ -362,8 +362,7 @@ RS_Commands::RS_Commands() {
         // draw circle
         {
             {{"circle", QObject::tr("circle", "draw circle")}},
-            {{"ci", QObject::tr("ci", "draw circle")},
-                {"c", QObject::tr("c", "draw circle")}},   // - v2.2.0r2
+            {{"ci", QObject::tr("ci", "draw circle")}},
             RS2::ActionDrawCircle
         },
         // draw 2 point circle
@@ -668,8 +667,12 @@ RS_Commands::RS_Commands() {
         /* MODIFY COMMANDS */
         // move
         {
-            {{"modmove", QObject::tr("modmove", "modify - move (copy)")}},
-            {{"mv", QObject::tr("mv", "modify - move (copy)")}},
+            {{"modmove", QObject::tr("modmove", "modify - move (copy)")},
+             {"copy", QObject::tr("copy", "modify - copy")}},
+            {{"mv", QObject::tr("mv", "modify - move (copy)")},
+             {"m", QObject::tr("m", "modify - move")},
+             {"cp", QObject::tr("cp", "modify - copy")},
+             {"c", QObject::tr("c", "modify - copy")}},
             RS2::ActionModifyMove
         },
         // rotate

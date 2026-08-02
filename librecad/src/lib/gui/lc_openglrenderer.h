@@ -6,7 +6,8 @@
 #include <QOpenGLShaderProgram>
 #include <QOpenGLBuffer>
 #include <QOpenGLVertexArrayObject>
-#include <vector>
+#include "lc_geometrycache.h"
+#include "lc_gpubuffermanager.h"
 
 class LC_CachedScene;
 
@@ -26,23 +27,15 @@ public:
     void render(const LC_CachedScene* scene, double offsetX, double offsetY, double factorX, double factorY, int viewWidth, int viewHeight) override;
 
 private:
-    struct Vertex {
-        float x;
-        float y;
-        uint32_t color;
-    };
-
     void setupShaders();
-    void uploadGeometry(const LC_CachedScene* scene);
 
     QOpenGLShaderProgram m_shaderProgram;
     QOpenGLVertexArrayObject m_vao;
-    QOpenGLBuffer m_vbo;
+
+    LC_GeometryCache m_geometryCache;
+    LC_GPUBufferManager m_bufferManager;
 
     QMatrix4x4 m_projMatrix;
-
-    uint64_t m_lastRevision = 0;
-    int m_vertexCount = 0;
 };
 
 #endif // LC_OPENGLRENDERER_H

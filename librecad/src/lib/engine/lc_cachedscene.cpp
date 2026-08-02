@@ -12,6 +12,7 @@ LC_CachedScene::~LC_CachedScene() = default;
 
 void LC_CachedScene::clear() {
     m_entities.clear();
+    m_entityRevisions.clear();
     m_spatialIndex->clear();
     m_revision++;
 }
@@ -43,10 +44,12 @@ void LC_CachedScene::notifyEntityChanged(RS_Entity* entity) {
     
     if (ce.visible) {
         m_entities[id] = ce;
+        m_entityRevisions[id] = m_revision + 1; // It will be m_revision + 1 because m_revision bumps below
         m_spatialIndex->insert(ce);
     } else {
         // If it's not visible (or deleted, or not implemented), erase it
         m_entities.erase(id);
+        m_entityRevisions.erase(id);
     }
     m_revision++;
 }
@@ -54,7 +57,16 @@ void LC_CachedScene::notifyEntityChanged(RS_Entity* entity) {
 void LC_CachedScene::notifyEntityRemoved(unsigned int entityId) {
     m_spatialIndex->remove(entityId);
     m_entities.erase(entityId);
+    m_entityRevisions.erase(entityId);
     m_revision++;
+}
+
+uint64_t LC_CachedScene::getEntityRevision(unsigned int entityId) const {
+    auto it = m_entityRevisions.find(entityId);
+    if (it != m_entityRevisions.end()) {
+        return it->second;
+    }
+    return 0;
 }
 
 void LC_CachedScene::getVisibleEntities(const LC_Rect& viewport, std::vector<CachedEntity>& outEntities) const {
