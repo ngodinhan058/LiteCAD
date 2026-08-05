@@ -4,6 +4,7 @@
 #include "rs_circle.h"
 #include "rs_arc.h"
 #include "rs_insert.h"
+#include "rs_ellipse.h"
 #include <cmath>
 #include "rs_layer.h"
 #include "rs_pen.h"
@@ -22,14 +23,22 @@ CachedEntity LC_GeometryBuilder::build(RS_Entity* entity) {
     
     if (!minP.valid || !maxP.valid || 
         std::isnan(minP.x) || std::isnan(minP.y) || 
-        std::isnan(maxP.x) || std::isnan(maxP.y)) {
+        std::isnan(maxP.x) || std::isnan(maxP.y) ||
+        std::isinf(minP.x) || std::isinf(minP.y) ||
+        std::isinf(maxP.x) || std::isinf(maxP.y)) {
         ce.visible = false;
         return ce;
     }
     
+    // Boost.Geometry R-tree assertions will fail if min > max
+    double minX = std::min(minP.x, maxP.x);
+    double minY = std::min(minP.y, maxP.y);
+    double maxX = std::max(minP.x, maxP.x);
+    double maxY = std::max(minP.y, maxP.y);
+    
     ce.id = entity->getId();
     ce.type = entity->rtti();
-    ce.boundingBox = LC_Rect(minP, maxP);
+    ce.boundingBox = LC_Rect(RS_Vector(minX, minY), RS_Vector(maxX, maxY));
     
     RS_Pen pen = entity->getPen(true);
     ce.color = pen.getColor();
@@ -42,6 +51,7 @@ CachedEntity LC_GeometryBuilder::build(RS_Entity* entity) {
     
     ce.geometryOffset = 0;
     ce.geometrySize = 0;
+    ce.reversed = false;
     ce.originalEntity = entity;
     
     // Extract geometry
@@ -68,6 +78,18 @@ CachedEntity LC_GeometryBuilder::build(RS_Entity* entity) {
             ce.radius = arc->getRadius();
             ce.angle1 = arc->getAngle1();
             ce.angle2 = arc->getAngle2();
+            break;
+        }
+        case RS2::EntityEllipse: {
+            auto* ellipse = static_cast<RS_Ellipse*>(entity);
+            ce.p1_x = ellipse->getCenter().x;
+            ce.p1_y = ellipse->getCenter().y;
+            ce.p2_x = ellipse->getMajorP().x;
+            ce.p2_y = ellipse->getMajorP().y;
+            ce.radius = ellipse->getRatio();
+            ce.angle1 = ellipse->getAngle1();
+            ce.angle2 = ellipse->getAngle2();
+            ce.reversed = ellipse->isReversed();
             break;
         }
         default:

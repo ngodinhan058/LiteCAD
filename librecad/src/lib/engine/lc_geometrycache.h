@@ -63,6 +63,12 @@ public:
 
 private:
     void processLineEntity(const class CachedEntity& ent, uint64_t entRev, uint64_t sceneRev);
+    void processCircleEntity(const class CachedEntity& ent, uint64_t entRev, uint64_t sceneRev);
+    void processArcEntity(const class CachedEntity& ent, uint64_t entRev, uint64_t sceneRev);
+    void processEllipseEntity(const class CachedEntity& ent, uint64_t entRev, uint64_t sceneRev);
+    
+    void pushLineSegment(double x1, double y1, double x2, double y2, uint32_t color);
+
     void compactBuffer();
 
     std::vector<Vertex> m_lineVertices;

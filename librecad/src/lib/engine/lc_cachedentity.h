@@ -37,6 +37,7 @@ struct CachedEntity {
     // Reserved for Phase 3 (VBO)
     unsigned int geometryOffset;
     unsigned int geometrySize;
+    bool reversed;
     
     // Fallback for Phase 2 unsupported entities
     class RS_Entity* originalEntity;
